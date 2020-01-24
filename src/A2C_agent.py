@@ -12,11 +12,11 @@ import A2C_model
 
 
 class A2CAgent:
-    def __init__(self, model, lr=1e-4, gamma=0.80, value_c=0.2, entropy_c=1e-4):
+    def __init__(self, model, lr=1e-4, gamma=0.80, value_c=1, entropy_c=1e-4):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -27,7 +27,7 @@ class A2CAgent:
                 optimizer=self.optimizer,
                 loss=[self._logits_loss, self._value_loss])
 
-    def train(self, env, batch_sz=1000, updates=1, show_visual=True, random_action=False):
+    def train(self, env, batch_sz=500, updates=1, show_visual=True, random_action=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,), dtype=np.int32)
         rewards, dones, values = np.empty((3, batch_sz))
@@ -79,8 +79,14 @@ class A2CAgent:
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
-            losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
-            print(losses)
+            if(random_action):
+                for _ in range(50):
+                    losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
+                    print(losses)
+            else:
+                losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
+                print(losses)
+
 
             #logging.debug("[%d/%d] Losses: %s" % (
             #    update + 1, updates, losses))
@@ -128,15 +134,6 @@ class A2CAgent:
         entropy_loss = tf.keras.losses.categorical_crossentropy(probs, probs)
 
         return policy_loss - self.entropy_c*entropy_loss
-
-
-def normalize_data(data):
-    data_mean = np.mean(data, axis=0)
-    data_std = np.std(data, axis=0) + 1e-6
-    return data_mean, data_std
-
-def discrete_space_loss(y_true, y_pred):
-    return (-tf.math.log(tf.reduce_sum(tf.multiply(y_true,y_pred),1))) #dot product with one-hot vector
 
 def main():
     #random.seed(0)
