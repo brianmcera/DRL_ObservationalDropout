@@ -32,7 +32,7 @@ class A2CAgent:
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, batch_sz=20000, updates=1, show_visual=True, random_action=False):
+    def train(self, env, batch_sz=10000, updates=1, show_visual=True, random_action=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
