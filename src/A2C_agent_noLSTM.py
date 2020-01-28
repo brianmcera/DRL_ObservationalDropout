@@ -10,12 +10,12 @@ import gym
 import pdb
 import random
 
-import A2C_model
+import A2C_model_noLSTM as A2C_model
 import utils
 
 
 class A2CAgent:
-    def __init__(self, model, lr=1e-4, gamma=0.80, value_c=1, entropy_c=1e-4):
+    def __init__(self, model, lr=5e-4, gamma=0.99, value_c=1, entropy_c=1e-2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -33,7 +33,7 @@ class A2CAgent:
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, batch_sz=200, updates=1, show_visual=True, random_action=False):
+    def train(self, env, batch_sz=20000, updates=1, show_visual=True, random_action=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
@@ -43,43 +43,42 @@ class A2CAgent:
         ep_rewards = [0.0]
         next_obs = env.reset().astype(np.float64)
         self.model.reset_states()
-        #next_obs = (next_obs-self.img_mean)/self.img_std
+        next_obs = (next_obs-self.img_mean)/self.img_std
         for update in range(updates):
             for step in range(batch_sz):
                 observations[step] = next_obs.copy()
                 if(show_visual):
                     env.render()
                 if(random_action):
-                    actions[step], values[step] = self.model.action_value(
-                            next_obs[None,None,:])
-                    #actions[step] = env.action_space.sample()
+                    _, values[step] = self.model.action_value(
+                            next_obs[None,:])
+                    actions[step] = env.action_space.sample()
                 else:
-                    #actions[step], values[step] = self.model.action_value(
-                    #        next_obs[None,None,:])
                     actions[step], values[step] = self.model.action_value(
-                            observations[None,np.maximum(0,step-10):step+1])
+                            next_obs[None,:])
                 #logits, _ = self.model(next_obs[None,:])
                 #print(logits)
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 rewards[step] += 1
                 next_obs = next_obs.astype(np.float64)
-                #next_obs = (next_obs-self.img_mean)/self.img_std
+                next_obs = (next_obs-self.img_mean)/self.img_std
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
                     _, next_value = self.model.action_value(
-                            next_obs[None,None,:])
+                            next_obs[None,:])
+                    rewards[step] -= 20
                     rewards[step] += next_value
                     print(ep_rewards)
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
                     self.model.reset_states()
-                    #next_obs = (next_obs-self.img_mean)/self.img_std
+                    next_obs = (next_obs-self.img_mean)/self.img_std
                     #logging.info("Episode: %03d, Reward: %03d" % (
                     #(ep_rewards) - 1, ep_rewards[-2]))
             
             # Handle bootstrapped Critic value for last (unfinished) run
-            _, next_value = self.model.action_value(next_obs[None,None,:])
+            _, next_value = self.model.action_value(next_obs[None,:])
 
             returns, advs = self._returns_advantages(
                     rewards, dones, values, next_value)
@@ -91,29 +90,21 @@ class A2CAgent:
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
 
-            #observations = observations[None,:]
-            #acts_and_advs = acts_and_advs[None,:]
-            #returns = returns[None,:]
-            
-            observations = utils.n_step_sequences(observations)
-            acts_and_advs = acts_and_advs[10:]#utils.n_step_sequences(acts_and_advs)
-            returns = returns[10:]#utils.n_step_sequences(returns)
-            
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
             if(random_action):
                 for _ in range(10):
-                    self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=8)
+                    self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=32)
             else:
-                self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=8)
+                self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=32)
 
 
             #logging.debug("[%d/%d] Losses: %s" % (
             #    update + 1, updates, losses))
         if(random_action):
-            #self.img_mean = observations.mean(axis=(0,1,2,3), keepdims=True)[0]
-            #self.img_std = observations.std(axis=(0,1,2,3), keepdims=True)[0]
+            self.img_mean = observations.mean(axis=(0,1,2), keepdims=True)[0]
+            self.img_std = observations.std(axis=(0,1,2), keepdims=True)[0]
             pass
         return ep_rewards
 
