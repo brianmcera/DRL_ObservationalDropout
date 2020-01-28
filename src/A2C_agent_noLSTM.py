@@ -58,7 +58,7 @@ class A2CAgent:
                 #logits, _ = self.model(next_obs[None,:])
                 #print(logits)
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
-                rewards[step] += 1
+                #rewards[step] += 1
                 next_obs = next_obs.astype(np.float64)
                 next_obs = (next_obs-self.img_mean)/self.img_std
 
@@ -66,7 +66,7 @@ class A2CAgent:
                 if dones[step]:
                     _, next_value = self.model.action_value(
                             next_obs[None,:])
-                    rewards[step] -= 20
+                    #rewards[step] -= 20
                     rewards[step] += next_value
                     print(ep_rewards)
                     ep_rewards.append(0.0)
@@ -83,7 +83,7 @@ class A2CAgent:
                     rewards, dones, values, next_value)
 
             # normalize advantages for numerical stability
-            #advs -= np.mean(advs)
+            advs -= np.mean(advs)
             #advs /= np.std(advs)
 
             # A trick to input actions and advantages through same API.
@@ -177,7 +177,7 @@ def main():
     graph = tf.compat.v1.get_default_graph()
     graph.finalize()
     while True:
-        rewards_history = agent.train(env, show_visual=True)
+        rewards_history = agent.train(env, show_visual=False)
         rewards_means.append(np.mean(rewards_history[:-1]))
         rewards_stds.append(np.std(rewards_history[:-1]))
         # plt.plot(rewards_means)
