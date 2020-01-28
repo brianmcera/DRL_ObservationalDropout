@@ -84,8 +84,8 @@ class A2CAgent:
                     rewards, dones, values, next_value)
 
             # normalize advantages for numerical stability
-            advs -= np.mean(advs)
-            advs /= np.std(advs)
+            #advs -= np.mean(advs)
+            #advs /= np.std(advs)
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
