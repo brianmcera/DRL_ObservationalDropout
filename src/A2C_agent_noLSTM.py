@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow_probability as tfp
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 import numpy as np
 from sklearn import preprocessing, decomposition
@@ -172,7 +171,7 @@ def main():
     #rewards_sum = agent.test(env)
     #print(rewards_sum)
     
-    rewards_history = agent.train(env, updates=1, random_action=True)
+    rewards_history = agent.train(env, updates=1, random_action=True, show_visual=False)
     rewards_means = [np.mean(rewards_history[:-1])]
     rewards_stds = [np.std(rewards_history[:-1])]
     graph = tf.compat.v1.get_default_graph()

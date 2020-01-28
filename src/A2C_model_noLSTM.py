@@ -77,5 +77,6 @@ class Model(Model):
 
     def action_value(self, obs):
         logits, value = self.predict_on_batch(obs)
-        action = self.dist.predict_on_batch(logits)
+        #action = self.dist.predict_on_batch(logits)
+        action = tf.random.categorical(logits,1)
         return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
