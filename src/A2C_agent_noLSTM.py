@@ -14,11 +14,11 @@ import utils
 
 
 class A2CAgent:
-    def __init__(self, model, lr=5e-4, gamma=0.99, value_c=1, entropy_c=1e-2):
+    def __init__(self, model, lr=1e-4, gamma=0.99, value_c=1, entropy_c=1e-2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -32,7 +32,7 @@ class A2CAgent:
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, batch_sz=10000, updates=1, show_visual=True, random_action=False):
+    def train(self, env, batch_sz=15000, updates=1, show_visual=True, random_action=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
@@ -68,7 +68,7 @@ class A2CAgent:
                             next_obs[None,:])
                     #rewards[step] -= 20
                     rewards[step] += next_value
-                    print(ep_rewards)
+                    #print(ep_rewards)
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
                     self.model.reset_states()
@@ -84,7 +84,7 @@ class A2CAgent:
 
             # normalize advantages for numerical stability
             advs -= np.mean(advs)
-            #advs /= np.std(advs)
+            advs /= np.std(advs)
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
@@ -93,10 +93,10 @@ class A2CAgent:
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
             if(random_action):
-                for _ in range(10):
-                    self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=32)
+                for _ in range(1):
+                    self.model.fit(observations, [acts_and_advs, returns], shuffle=False, batch_size=64)
             else:
-                self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=32)
+                self.model.fit(observations, [acts_and_advs, returns], shuffle=False, batch_size=64)
 
 
             #logging.debug("[%d/%d] Losses: %s" % (
@@ -177,7 +177,7 @@ def main():
     graph = tf.compat.v1.get_default_graph()
     graph.finalize()
     while True:
-        rewards_history = agent.train(env, show_visual=False)
+        rewards_history = agent.train(env, show_visual=True)
         rewards_means.append(np.mean(rewards_history[:-1]))
         rewards_stds.append(np.std(rewards_history[:-1]))
         # plt.plot(rewards_means)

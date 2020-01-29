@@ -1,3 +1,5 @@
 /logs
 /model_checkpoints
 *.py~
+*.py.un~
+*.py.swp
