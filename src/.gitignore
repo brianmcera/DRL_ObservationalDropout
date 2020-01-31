@@ -4,3 +4,4 @@
 *.py.un~
 *.py.swp
 *.un~
+/weights
