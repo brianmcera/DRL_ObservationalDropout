@@ -16,7 +16,7 @@ import utils
 
 
 class A2CAgent:
-    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-6):
+    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -46,7 +46,7 @@ class A2CAgent:
         next_obs = env.reset().astype(np.float64)
         next_obs = (next_obs-self.img_mean)/self.img_std
         prev_obs = next_obs.copy()
-        print('Running episodes...')
+        print('\n\nRunning episodes...')
         first_run = True
         for update in range(updates):
             for step in tqdm(range(batch_sz)):
@@ -62,13 +62,9 @@ class A2CAgent:
                 else:
                     actions[step], values[step] = self.model.action_value(
                             combined_obs[None,:])
-                #logits, _ = self.model(next_obs[None,:])
-                #print(logits)
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
-                #rewards[step] += 1
                 next_obs = next_obs.astype(np.float64)
                 next_obs = (next_obs-self.img_mean)/self.img_std
-                #print(step)
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
@@ -76,7 +72,7 @@ class A2CAgent:
                             combined_obs[None,:])
                     #rewards[step] -= 20
                     if(not random_action):
-                        # only bootstrap after first run to initialize Critic
+                        # don't bootstrap first (random) run 
                         rewards[step] += next_value
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
@@ -103,7 +99,9 @@ class A2CAgent:
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
 
+            # Disregard incomplete runs at head/tail
             idx = np.argwhere(dones==1)
+            first_index = idx[0][0]
             last_index = idx[-1][0]
 
             # Decimate observations (similar observations)
@@ -111,6 +109,7 @@ class A2CAgent:
             observations = observations[0:last_index:skip]
             returns = returns[0:last_index:skip]
             acts_and_advs = acts_and_advs[0:last_index:skip]
+
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
@@ -120,12 +119,14 @@ class A2CAgent:
             else:
                 self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=256, epochs=1)
 
-            # Print out distribution of Actions 
+            # Print out distribution of Actions, useful for debugging during training
             print('Action distribution for batch:')
             print(np.histogram(actions, bins=list(range(1,env.action_space.n+1)))[0])
             # Print out distribution of Rewards-Value 
             print('Advantage distribution for batch:')
-            print(np.histogram(advs)) 
+            print(np.histogram(advs)[0]) 
+            print('Advantage histogram bins:')
+            print(np.histogram(advs)[1]) 
 
         if(random_action):
             num_channels = env.observation_space.shape[-1]
@@ -188,6 +189,8 @@ def main():
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
     args = parser.parse_args()
 
+    np.set_printoptions(precision=2)
+
     sim_steps = 0
     batch_sz = args.batch_size
 
@@ -207,26 +210,33 @@ def main():
     #print(rewards_sum)
     
     rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
-    rewards_means = [np.mean(rewards_history[:-1])]
-    rewards_stds = [np.std(rewards_history[:-1])]
+    rewards_means = np.array([np.mean(rewards_history[:-1])])
+    rewards_stds = np.array([np.std(rewards_history[:-1])])
     graph = tf.compat.v1.get_default_graph()
     graph.finalize()
 
+    agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
+    iter_count = 0
     while True:
+        iter_count += 1
         rewards_history = agent.train(env, batch_sz=batch_sz, show_visual=args.visual, show_first=args.show_first)
-        rewards_means.append(np.mean(rewards_history[:-1]))
-        rewards_stds.append(np.std(rewards_history[:-1]))
+        rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+        rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
         # plt.plot(rewards_means)
         # plt.plot(np.array(rewards_means)+np.array(rewards_stds))
         # plt.plot(np.array(rewards_means)-np.array(rewards_stds))
         # plt.draw()
         # plt.pause(1e-3)
+        print('Total Sim Steps: ' + str(sim_steps))
         print('Number of levels: ' + str(len(rewards_history)))
-        print('Epoch mean reward: ' + str(rewards_means))
-        print('Epoch std reward: ' + str(rewards_stds))
+        print('Epoch mean reward: ')
+        print(rewards_means)
+        print('Epoch std reward: ')
+        print(rewards_stds)
         sim_steps += batch_sz
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        model.save_weights('weights/' + current_time + '_' + str(sim_steps), save_format='tf')
+        if(iter_count%10==0):
+            model.save_weights('weights/' + current_time + '_' + str(sim_steps), save_format='tf')
     print('Finished Training, testing now...')
 
     return
