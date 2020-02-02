@@ -20,7 +20,7 @@ class A2CAgent:
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -106,9 +106,9 @@ class A2CAgent:
 
             # Decimate observations (similar observations)
             skip = 1
-            observations = observations[0:last_index:skip]
-            returns = returns[0:last_index:skip]
-            acts_and_advs = acts_and_advs[0:last_index:skip]
+            observations = observations[first_index+1:last_index:skip]
+            returns = returns[first_index+1:last_index:skip]
+            acts_and_advs = acts_and_advs[first_index+1:last_index:skip]
 
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
@@ -121,7 +121,7 @@ class A2CAgent:
 
             # Print out distribution of Actions, useful for debugging during training
             print('Action distribution for batch:')
-            print(np.histogram(actions, bins=list(range(1,env.action_space.n+1)))[0])
+            print(np.histogram(actions, bins=list(range(0,env.action_space.n)))[0])
             # Print out distribution of Rewards-Value 
             print('Advantage distribution for batch:')
             print(np.histogram(advs)[0]) 
@@ -175,19 +175,26 @@ class A2CAgent:
         return policy_loss - self.entropy_c*entropy_loss
 
 def main():
-    #random.seed(0)
-    #tf.random.set_seed(0)
-    #enable dynamic GPU memory allocation
-    #physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    #assert len(physical_devices) > 0
-    #tf.config.experimental.set_memory_growth(physical_devices[0], True)
-    # tf.keras.backend.set_floatx('float64')
-
     parser = argparse.ArgumentParser(description='RL training parameters')
     parser.add_argument('-v', '--visual', default=False, action='store_true')
     parser.add_argument('-bs', '--batch_size', type=int, default=15000)
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
+    parser.add_argument('-l', '--local', default=False, action='store_true')
     args = parser.parse_args()
+
+    #random.seed(0)
+    #tf.random.set_seed(0)
+
+    # enable dynamic GPU memory allocation
+    physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    assert len(physical_devices) > 0
+    if args.local:
+        print('Training on local GPU, limit memory allocation')
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        tf.config.experimental.set_virtual_device_configuration(
+                physical_devices[0],
+                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4000)])
+
 
     np.set_printoptions(precision=2)
 
@@ -202,7 +209,7 @@ def main():
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", start_level=0, num_levels=1, distribution_mode="easy") # define chosen environment here
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, distribution_mode="easy") # define chosen environment here
     model = A2C_model.Model(env.action_space.n)
     obs = env.reset()
     agent = A2CAgent(model)
@@ -215,17 +222,17 @@ def main():
     graph = tf.compat.v1.get_default_graph()
     graph.finalize()
 
-    agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
+    #agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
     iter_count = 0
     while True:
         iter_count += 1
         rewards_history = agent.train(env, batch_sz=batch_sz, show_visual=args.visual, show_first=args.show_first)
         rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
         rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-        # plt.plot(rewards_means)
-        # plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-        # plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-        # plt.draw()
+        plt.plot(rewards_means)
+        plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+        plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+        plt.draw()
         # plt.pause(1e-3)
         print('Total Sim Steps: ' + str(sim_steps))
         print('Number of levels: ' + str(len(rewards_history)))
