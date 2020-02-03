@@ -16,11 +16,11 @@ import utils
 
 
 class A2CAgent:
-    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2):
+    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-3):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -56,9 +56,9 @@ class A2CAgent:
                 if(show_visual or (show_first and first_run)):
                     env.render()
                 if(random_action):
-                    _, values[step] = self.model.action_value(
+                    actions[step], values[step] = self.model.action_value(
                             combined_obs[None,:])
-                    actions[step] = env.action_space.sample()
+                    #actions[step] = env.action_space.sample()
                 else:
                     actions[step], values[step] = self.model.action_value(
                             combined_obs[None,:])
@@ -220,7 +220,8 @@ def main():
     rewards_means = np.array([np.mean(rewards_history[:-1])])
     rewards_stds = np.array([np.std(rewards_history[:-1])])
     graph = tf.compat.v1.get_default_graph()
-    graph.finalize()
+    #graph.finalize()
+    #tf.compat.v1.disable_eager_execution()
 
     #agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
     iter_count = 0
