@@ -1,5 +1,6 @@
 import tensorflow as tf
 import tensorflow_probability as tfp
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 import numpy as np
 from sklearn import preprocessing, decomposition
 import matplotlib.pyplot as plt
@@ -8,15 +9,17 @@ import time
 import gym
 import pdb
 import random
+
 import A2C_model
+import utils
 
 
 class A2CAgent:
-    def __init__(self, model, lr=1e-4, gamma=0.80, value_c=0.2, entropy_c=1e-4):
+    def __init__(self, model, lr=1e-4, gamma=0.80, value_c=1, entropy_c=1e-4):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -25,17 +28,21 @@ class A2CAgent:
         self.model = model
         self.model.compile(
                 optimizer=self.optimizer,
-                loss=[self._logits_loss, self._value_loss])
+                loss=[
+                    self._logits_loss, # actor loss
+                    self._value_loss   # critic loss
+                    ])
 
-    def train(self, env, batch_sz=1000, updates=1, show_visual=True, random_action=False):
+    def train(self, env, batch_sz=200, updates=1, show_visual=True, random_action=False):
         # Storage helpers for a single batch of data.
-        actions = np.empty((batch_sz,), dtype=np.int32)
+        actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
         observations = np.empty((batch_sz,) + env.observation_space.shape)
 
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
-        next_obs = env.reset().astype(np.float32)
+        next_obs = env.reset().astype(np.float64)
+        self.model.reset_states()
         #next_obs = (next_obs-self.img_mean)/self.img_std
         for update in range(updates):
             for step in range(batch_sz):
@@ -43,50 +50,70 @@ class A2CAgent:
                 if(show_visual):
                     env.render()
                 if(random_action):
-                    actions[step] = env.action_space.sample()
-                    _, values[step] = self.model.action_value(next_obs[None, :])
+                    actions[step], values[step] = self.model.action_value(
+                            next_obs[None,None,:])
+                    #actions[step] = env.action_space.sample()
                 else:
-                    actions[step], values[step] = self.model.action_value(next_obs[None, :])
-                logits, _ = self.model(next_obs[None,:])
+                    #actions[step], values[step] = self.model.action_value(
+                    #        next_obs[None,None,:])
+                    actions[step], values[step] = self.model.action_value(
+                            observations[None,np.maximum(0,step-10):step+1])
+                #logits, _ = self.model(next_obs[None,:])
                 #print(logits)
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 rewards[step] += 1
-                next_obs = next_obs.astype(np.float32)
+                next_obs = next_obs.astype(np.float64)
                 #next_obs = (next_obs-self.img_mean)/self.img_std
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
-                    _, next_value = self.model.action_value(next_obs[None, :])
+                    _, next_value = self.model.action_value(
+                            next_obs[None,None,:])
                     rewards[step] += next_value
                     print(ep_rewards)
                     ep_rewards.append(0.0)
-                    next_obs = env.reset().astype(np.float32)
+                    next_obs = env.reset().astype(np.float64)
+                    self.model.reset_states()
                     #next_obs = (next_obs-self.img_mean)/self.img_std
                     #logging.info("Episode: %03d, Reward: %03d" % (
                     #(ep_rewards) - 1, ep_rewards[-2]))
+            
+            # Handle bootstrapped Critic value for last (unfinished) run
+            _, next_value = self.model.action_value(next_obs[None,None,:])
 
-            _, next_value = self.model.action_value(next_obs[None, :])
+            returns, advs = self._returns_advantages(
+                    rewards, dones, values, next_value)
 
-            returns, advs = self._returns_advantages(rewards, dones, values, next_value)
-
-            # normalize advantages
+            # normalize advantages for numerical stability
             advs -= np.mean(advs)
             advs /= np.std(advs)
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
 
+            #observations = observations[None,:]
+            #acts_and_advs = acts_and_advs[None,:]
+            #returns = returns[None,:]
+            
+            observations = utils.n_step_sequences(observations)
+            acts_and_advs = acts_and_advs[10:]#utils.n_step_sequences(acts_and_advs)
+            returns = returns[10:]#utils.n_step_sequences(returns)
+            
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
-            losses = self.model.train_on_batch(observations, [acts_and_advs, returns])
-            print(losses)
+            if(random_action):
+                for _ in range(10):
+                    self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=8)
+            else:
+                self.model.fit(observations, [acts_and_advs, returns], shuffle=True, batch_size=8)
+
 
             #logging.debug("[%d/%d] Losses: %s" % (
             #    update + 1, updates, losses))
         if(random_action):
-            #self.img_mean = observations.mean(axis=(0,1,2), keepdims=True)[0]
-            #self.img_std = observations.std(axis=(0,1,2), keepdims=True)[0]
+            #self.img_mean = observations.mean(axis=(0,1,2,3), keepdims=True)[0]
+            #self.img_std = observations.std(axis=(0,1,2,3), keepdims=True)[0]
             pass
         return ep_rewards
 
@@ -129,23 +156,15 @@ class A2CAgent:
 
         return policy_loss - self.entropy_c*entropy_loss
 
-
-def normalize_data(data):
-    data_mean = np.mean(data, axis=0)
-    data_std = np.std(data, axis=0) + 1e-6
-    return data_mean, data_std
-
-def discrete_space_loss(y_true, y_pred):
-    return (-tf.math.log(tf.reduce_sum(tf.multiply(y_true,y_pred),1))) #dot product with one-hot vector
-
 def main():
     #random.seed(0)
     #tf.random.set_seed(0)
     #enable dynamic GPU memory allocation
-    # physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    # assert len(physical_devices) > 0
-    # tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    #physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    #assert len(physical_devices) > 0
+    #tf.config.experimental.set_memory_growth(physical_devices[0], True)
     # tf.keras.backend.set_floatx('float64')
+
 
     # set up tensorboard logging
     current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -155,25 +174,29 @@ def main():
     test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", start_level=3, num_levels=1, distribution_mode='easy') # define chosen environment here
+    env = gym.make("procgen:procgen-starpilot-v0", start_level=3, num_levels=1, distribution_mode="easy") # define chosen environment here
     model = A2C_model.Model(env.action_space.n)
     obs = env.reset()
     agent = A2CAgent(model)
-    rewards_sum = agent.test(env)
-    print(rewards_sum)
+    #rewards_sum = agent.test(env)
+    #print(rewards_sum)
     
     rewards_history = agent.train(env, updates=1, random_action=True)
     rewards_means = [np.mean(rewards_history[:-1])]
     rewards_stds = [np.std(rewards_history[:-1])]
+    graph = tf.compat.v1.get_default_graph()
+    graph.finalize()
     while True:
-        rewards_history = agent.train(env)
+        rewards_history = agent.train(env, show_visual=True)
         rewards_means.append(np.mean(rewards_history[:-1]))
         rewards_stds.append(np.std(rewards_history[:-1]))
-        plt.plot(rewards_means)
-        plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-        plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-        plt.draw()
-        plt.pause(1e-3)
+        # plt.plot(rewards_means)
+        # plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+        # plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+        # plt.draw()
+        # plt.pause(1e-3)
+        print(rewards_means)
+        print(rewards_stds)
     print('Finished Training, testing now...')
 
     return
