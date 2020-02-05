@@ -3,6 +3,7 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 import numpy as np
 from sklearn import preprocessing, decomposition
 import matplotlib.pyplot as plt
+from matplotlib.pyplot import ion
 import datetime
 import time
 import gym
@@ -16,7 +17,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-3, reconstruction_c=1e-8):
+    def __init__(self, model, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-3, reconstruction_c=1e-2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -36,7 +37,7 @@ class Agent:
                     self._reconstruction_loss       # observation reconstruction loss
                     ])
 
-    def train(self, env, batch_sz=15000, updates=1, show_visual=True, random_action=False, show_first=False):
+    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
@@ -44,10 +45,12 @@ class Agent:
         observations = np.concatenate((observations,observations), axis=-1)
         reconstructions = np.empty((batch_sz,) + env.observation_space.shape)
 
+        peek_prob = 0.5
+
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
         next_obs = env.reset().astype(np.float64)
-        next_obs = (next_obs-self.img_mean)/self.img_std
+        next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
         prev_obs = next_obs.copy()
         print('\n\nRunning episodes...')
         first_run = True
@@ -67,7 +70,13 @@ class Agent:
                             combined_obs[None,:])
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
-                next_obs = (next_obs-self.img_mean)/self.img_std
+                next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
+
+                # observational dropout
+                if (np.random.uniform() > peek_prob):
+                    next_obs = reconstructions[step]
+                    #plt.imshow((next_obs-np.min(next_obs))/(np.ptp(next_obs)))
+                    #plt.show()
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
@@ -79,7 +88,7 @@ class Agent:
                         rewards[step] += next_value
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
-                    next_obs = (next_obs-self.img_mean)/self.img_std
+                    next_obs = (next_obs-128)/256#(next_obs-self.img_mean)/self.img_std
                     prev_obs = next_obs.copy()
                     first_run = False
                     #logging.info("Episode: %03d, Reward: %03d" % (
@@ -95,9 +104,8 @@ class Agent:
                     rewards, dones, values, next_value)
 
             # normalize advantages for numerical stability
-            advs -= np.min(advs)
+            advs -= np.mean(advs)
             advs /= np.std(advs) + 1e-3
-
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
@@ -207,7 +215,7 @@ class Agent:
 def main():
     parser = argparse.ArgumentParser(description='RL training parameters')
     parser.add_argument('-v', '--visual', default=False, action='store_true')
-    parser.add_argument('-bs', '--batch_size', type=int, default=15000)
+    parser.add_argument('-bs', '--batch_size', type=int, default=5000)
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
     parser.add_argument('-l', '--local', default=False, action='store_true')
     args = parser.parse_args()
@@ -227,6 +235,8 @@ def main():
 
 
     np.set_printoptions(precision=2)
+
+    ion()  # set matplotlib to interactive mode
 
     sim_steps = 0
     batch_sz = args.batch_size
@@ -248,8 +258,9 @@ def main():
     rewards_means = np.array([np.mean(rewards_history[:-1])])
     rewards_stds = np.array([np.std(rewards_history[:-1])])
     graph = tf.compat.v1.get_default_graph()
+    graph.finalize()
 
-    #agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
+    #agent.model.load_weights('pretrained_examples/' + '20200204-183104_350000')
     iter_count = 0
     while True:
         iter_count += 1

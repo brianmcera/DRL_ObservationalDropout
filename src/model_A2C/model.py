@@ -28,9 +28,9 @@ class ResidualBlock(layers.Layer):
 class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
-        self.conv1 = Conv2D(64, 3, kernel_regularizer=regularizers.l2(0.001))
-        self.conv2 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001))
-        self.conv3 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001))
+        self.conv1 = Conv2D(64, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
+        self.conv2 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
+        self.conv3 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2)
@@ -65,19 +65,19 @@ class Model(Model):
 
     def call(self, inputs):
         i = tf.convert_to_tensor(inputs)
-        i = self.batchnormalization0(i)
+        #i = self.batchnormalization0(i)
         i = self.conv1(i)
-        i = self.batchnormalization1(i)
+        #i = self.batchnormalization1(i)
         i = self.maxpool1(i)
         i = self.res1(i)
         i = self.res2(i)
         i = self.conv2(i)
-        i = self.batchnormalization2(i)
+        #i = self.batchnormalization2(i)
         i = self.maxpool2(i)
         i = self.res3(i)
         i = self.res4(i)
         i = self.conv3(i)
-        i = self.batchnormalization3(i)
+        #i = self.batchnormalization3(i)
         i = self.maxpool3(i)
         i = self.res5(i)
         i = self.res6(i)
@@ -90,7 +90,7 @@ class Model(Model):
         #x = self.LSTM1(x)
         #x = self.d2(x)
         #x = self.d3(x)
-        x = self.batchnormalization4(x)
+        #x = self.batchnormalization4(x)
         #x = self.dropout2(x)
 
         # critic dense layers
@@ -100,7 +100,7 @@ class Model(Model):
         #y = self.LSTM2(y)
         #y = self.d5(y)
         #y = self.d6(y)
-        y = self.batchnormalization5(y)
+        #y = self.batchnormalization5(y)
         #y = self.dropout4(y)
 
         return self.logits(x), self.value(y)

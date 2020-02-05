@@ -16,7 +16,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-3):
+    def __init__(self, model, lr=1e-5, gamma=0.999, value_c=0.5, entropy_c=1e-2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -32,9 +32,10 @@ class Agent:
                 loss=[
                     self._logits_loss, # actor loss
                     self._value_loss   # critic loss
-                    ])
+                    ],
+                loss_weights=[1,1])
 
-    def train(self, env, batch_sz=15000, updates=1, show_visual=True, random_action=False, show_first=False):
+    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
@@ -44,7 +45,7 @@ class Agent:
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
         next_obs = env.reset().astype(np.float64)
-        next_obs = (next_obs-self.img_mean)/self.img_std
+        next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
         prev_obs = next_obs.copy()
         print('\n\nRunning episodes...')
         first_run = True
@@ -64,19 +65,19 @@ class Agent:
                             combined_obs[None,:])
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
-                next_obs = (next_obs-self.img_mean)/self.img_std
+                next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
                     _, next_value = self.model.action_value(
                             combined_obs[None,:])
-                    #rewards[step] -= 20
+                    rewards[step] += 1
                     if(not random_action):
                         # don't bootstrap first (random) run 
                         rewards[step] += next_value
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
-                    next_obs = (next_obs-self.img_mean)/self.img_std
+                    next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
                     prev_obs = next_obs.copy()
                     first_run = False
                     #logging.info("Episode: %03d, Reward: %03d" % (
@@ -90,6 +91,8 @@ class Agent:
 
             returns, advs = self._returns_advantages(
                     rewards, dones, values, next_value)
+            print('Average Advantage:')
+            print(np.mean(advs))
 
             # normalize advantages for numerical stability
             advs -= np.mean(advs)
@@ -185,9 +188,10 @@ class Agent:
 def main():
     parser = argparse.ArgumentParser(description='RL training parameters')
     parser.add_argument('-v', '--visual', default=False, action='store_true')
-    parser.add_argument('-bs', '--batch_size', type=int, default=15000)
+    parser.add_argument('-bs', '--batch_size', type=int, default=5000)
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
     parser.add_argument('-l', '--local', default=False, action='store_true')
+    parser.add_argument('-ts', '--total_steps', type=int, default=int(5e6))
     args = parser.parse_args()
 
     #random.seed(0)
@@ -204,7 +208,7 @@ def main():
                 [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4000)])
 
 
-    np.set_printoptions(precision=2)
+    np.set_printoptions(precision=3)
 
     sim_steps = 0
     batch_sz = args.batch_size
@@ -227,9 +231,9 @@ def main():
     rewards_stds = np.array([np.std(rewards_history[:-1])])
     graph = tf.compat.v1.get_default_graph()
 
-    #agent.model.load_weights('pretrained_examples/' + '20200131-061824_2515000')
+    #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
     iter_count = 0
-    while True:
+    for _ in range(args.total_steps):
         iter_count += 1
         rewards_history = agent.train(env, 
                 batch_sz=batch_sz, 
