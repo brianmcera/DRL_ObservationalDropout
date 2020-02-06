@@ -37,7 +37,7 @@ class Agent:
                     self._reconstruction_loss       # observation reconstruction loss
                     ])
 
-    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False):
+    def train(self, env, batch_sz=1000, updates=1, show_visual=True, random_action=False, show_first=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
@@ -80,9 +80,8 @@ class Agent:
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
-                    _, next_value = self.model.action_value(
+                    _, next_value, _ = self.model.action_value_obs(
                             combined_obs[None,:])
-                    #rewards[step] -= 20
                     if(not random_action):
                         # don't bootstrap first (random) run 
                         rewards[step] += next_value
@@ -96,7 +95,7 @@ class Agent:
             
             # Handle bootstrapped Critic value for last (unfinished) run
             if(not random_action):
-                _, next_value = self.model.action_value(combined_obs[None,:])
+                _, next_value, _ = self.model.action_value_obs(combined_obs[None,:])
             else:
                 next_value = np.array([0])
 
@@ -111,8 +110,9 @@ class Agent:
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
 
             # A trick to input reconstructions and advantages through same API.
-            reconstructions_flattened = reconstructions.reshape(batch_sz,-1)
-            reconstr_and_advs = np.concatenate([reconstructions_flattened, advs[:, None]], axis=-1)
+            advs_reshaped = advs.reshape((-1,) + (1,)*(reconstructions.ndim-1))
+            advs_broadcast = reconstructions*0 + advs_reshaped
+            reconstr_and_advs = np.concatenate([reconstructions[..., None], advs_broadcast[..., None]], axis=-1)
 
             # Disregard incomplete runs at head/tail
             idx = np.argwhere(dones==1)
@@ -181,15 +181,7 @@ class Agent:
         return returns, advantages
 
     def _reconstruction_loss(self, reconstruction_and_advantages, nn_reconstruction):
-        #reconstruction, advantages = tf.split(reconstruction_and_advantages, 2, axis=-1)
-        reconstruction = reconstruction_and_advantages[:,:-1]
-        #reconstruction = tf.reshape(reconstruction, (-1,64,64,3))
-        advantages = reconstruction_and_advantages[:,-1]
-
-        shape = nn_reconstruction.get_shape().as_list()
-        dim = np.prod(shape[1:])
-        nn_reconstruction = tf.reshape(nn_reconstruction,(-1, dim))
-
+        reconstruction, advantages = tf.split(reconstruction_and_advantages, 2, axis=-1)
         weighted_MSE = tf.keras.losses.MeanSquaredError()
         reconstruction_loss = weighted_MSE(reconstruction, nn_reconstruction, sample_weight=advantages)
         return self.reconstruction_c*reconstruction_loss 
@@ -200,9 +192,7 @@ class Agent:
 
     def _logits_loss(self, actions_and_advantages, logits):
         actions, advantages = tf.split(actions_and_advantages, 2, axis=-1)
-
         weighted_sparse_ce = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-
         actions = tf.cast(actions, tf.int32)
         policy_loss = weighted_sparse_ce(actions, logits, sample_weight=advantages)
 
@@ -248,47 +238,48 @@ def main():
     # train_summary_writer = tf.summary.create_file_writer(train_log_dir)
     # test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
-    # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, distribution_mode="easy") 
-    model = Model.Model(env.action_space.n)
-    obs = env.reset()
-    agent = Agent(model)
-    
-    rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
-    rewards_means = np.array([np.mean(rewards_history[:-1])])
-    rewards_stds = np.array([np.std(rewards_history[:-1])])
-    graph = tf.compat.v1.get_default_graph()
-    graph.finalize()
+    with tf.Graph().as_default():
+        # initialize environment and deep model
+        env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, distribution_mode="easy") 
+        model = Model.Model(env.action_space.n)
+        obs = env.reset()
+        agent = Agent(model)
+        
+        rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
+        rewards_means = np.array([np.mean(rewards_history[:-1])])
+        rewards_stds = np.array([np.std(rewards_history[:-1])])
+        graph = tf.compat.v1.get_default_graph()
+        #graph.finalize()
 
-    #agent.model.load_weights('pretrained_examples/' + '20200204-183104_350000')
-    iter_count = 0
-    while True:
-        iter_count += 1
-        rewards_history = agent.train(env, 
-                batch_sz=batch_sz, 
-                show_visual=args.visual, 
-                show_first=args.show_first)
-        rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
-        rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-        plt.plot(rewards_means)
-        plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-        plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-        plt.draw()
-        # plt.pause(1e-3)
-        print('Total Sim Steps: ' + str(sim_steps))
-        print('Number of levels: ' + str(len(rewards_history)))
-        print('Epoch mean reward: ')
-        print(rewards_means)
-        print('Epoch std reward: ')
-        print(rewards_stds)
-        sim_steps += batch_sz
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        if(iter_count%10==0):
-            model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
-                    save_format='tf')
-    print('Finished Training, testing now...')
+        #agent.model.load_weights('pretrained_examples/' + '20200204-183104_350000')
+        iter_count = 0
+        while True:
+            iter_count += 1
+            rewards_history = agent.train(env, 
+                    batch_sz=batch_sz, 
+                    show_visual=args.visual, 
+                    show_first=args.show_first)
+            rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+            rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
+            plt.plot(rewards_means)
+            plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+            plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+            plt.draw()
+            # plt.pause(1e-3)
+            print('Total Sim Steps: ' + str(sim_steps))
+            print('Number of levels: ' + str(len(rewards_history)))
+            print('Epoch mean reward: ')
+            print(rewards_means)
+            print('Epoch std reward: ')
+            print(rewards_stds)
+            sim_steps += batch_sz
+            current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if(iter_count%10==0):
+                model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
+                        save_format='tf')
+        print('Finished Training, testing now...')
 
-    return
+        return
 
 
 if __name__ == "__main__":

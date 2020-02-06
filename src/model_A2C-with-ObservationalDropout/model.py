@@ -121,16 +121,10 @@ class Model(Model):
         z = self.deconv3(z) 
 
 
-        return self.logits(x), self.value(y), z
-
-    def action_value(self, obs):
-        logits, value, _ = self.predict_on_batch(obs)
-        action = self.dist.predict_on_batch(logits)
-        #action = tf.random.categorical(logits,1)
-        return tf.squeeze(action, axis=-1), tf.squeeze(value, axis=-1)
+        return self.logits(x), self.value(y), tf.expand_dims(z, axis=-1)
 
     def action_value_obs(self, obs):
         logits, value, obs = self.predict_on_batch(obs)
         action = self.dist.predict_on_batch(logits)
         #action = tf.random.categorical(logits,1)
-        return np.squeeze(action, axis=-1), np.squeeze(value, axis=-1), obs
+        return np.squeeze(action, axis=-1), np.squeeze(value, axis=-1), np.squeeze(obs, axis=-1)
