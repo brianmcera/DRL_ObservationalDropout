@@ -67,7 +67,7 @@ class Model(Model):
         self.reshape = Reshape((16,16,32)) 
         self.deconv1 = Conv2DTranspose(64, 3, padding='same', activation='relu')
         self.deconv2 = Conv2DTranspose(128, 3, padding='same', activation='relu')
-        self.deconv3 = Conv2DTranspose(3, 3, padding='same', activation='relu')
+        self.deconv3 = Conv2DTranspose(3, 3, padding='same')
         self.upsample1 = UpSampling2D(2)
         self.upsample2 = UpSampling2D(2)
 
