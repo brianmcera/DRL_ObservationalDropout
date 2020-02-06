@@ -222,44 +222,46 @@ def main():
 
     # initialize environment and deep model
     env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, distribution_mode="easy") 
-    model = Model.Model(env.action_space.n)
-    obs = env.reset()
-    agent = Agent(model)
-    
-    rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
-    rewards_means = np.array([np.mean(rewards_history[:-1])])
-    rewards_stds = np.array([np.std(rewards_history[:-1])])
-    graph = tf.compat.v1.get_default_graph()
 
-    #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
-    iter_count = 0
-    for _ in range(args.total_steps):
-        iter_count += 1
-        rewards_history = agent.train(env, 
-                batch_sz=batch_sz, 
-                show_visual=args.visual, 
-                show_first=args.show_first)
-        rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
-        rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-        plt.plot(rewards_means)
-        plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-        plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-        plt.draw()
-        # plt.pause(1e-3)
-        print('Total Sim Steps: ' + str(sim_steps))
-        print('Number of levels: ' + str(len(rewards_history)))
-        print('Epoch mean reward: ')
-        print(rewards_means)
-        print('Epoch std reward: ')
-        print(rewards_stds)
-        sim_steps += batch_sz
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        if(iter_count%10==0):
-            model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
-                    save_format='tf')
-    print('Finished Training, testing now...')
+    with tf.Graph().as_default():
+        model = Model.Model(env.action_space.n)
+        obs = env.reset()
+        agent = Agent(model)
+        
+        rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
+        rewards_means = np.array([np.mean(rewards_history[:-1])])
+        rewards_stds = np.array([np.std(rewards_history[:-1])])
+        graph = tf.compat.v1.get_default_graph()
 
-    return
+        #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
+        iter_count = 0
+        for _ in range(args.total_steps):
+            iter_count += 1
+            rewards_history = agent.train(env, 
+                    batch_sz=batch_sz, 
+                    show_visual=args.visual, 
+                    show_first=args.show_first)
+            rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+            rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
+            plt.plot(rewards_means)
+            plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+            plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+            plt.draw()
+            # plt.pause(1e-3)
+            print('Total Sim Steps: ' + str(sim_steps))
+            print('Number of levels: ' + str(len(rewards_history)))
+            print('Epoch mean reward: ')
+            print(rewards_means)
+            print('Epoch std reward: ')
+            print(rewards_stds)
+            sim_steps += batch_sz
+            current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            if(iter_count%10==0):
+                model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
+                        save_format='tf')
+        print('Finished Training, testing now...')
+
+        return
 
 
 if __name__ == "__main__":
