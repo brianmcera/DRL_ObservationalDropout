@@ -16,11 +16,11 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-3, gamma=0.90, value_c=1.0, entropy_c=1e-1):
+    def __init__(self, model, lr=1e-4, gamma=0.99, value_c=1.0, entropy_c=1e-1):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
