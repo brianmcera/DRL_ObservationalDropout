@@ -28,9 +28,9 @@ class ResidualBlock(layers.Layer):
 class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
-        self.conv1 = Conv2D(64, 3, kernel_regularizer=regularizers.l2(0.001))
-        self.conv2 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001))
-        self.conv3 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001))
+        self.conv1 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.001))
+        self.conv2 = Conv2D(64, 5, kernel_regularizer=regularizers.l2(0.001))
+        self.conv3 = Conv2D(64, 7, kernel_regularizer=regularizers.l2(0.001))
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2)
@@ -51,6 +51,7 @@ class Model(Model):
         self.dropout2 = Dropout(rate=0.5)
         self.dropout3 = Dropout(rate=0.5)
         self.dropout4 = Dropout(rate=0.5)
+        self.dropout5 = Dropout(rate=0.5)
         self.batchnormalization0 = BatchNormalization()
         self.batchnormalization1 = BatchNormalization()
         self.batchnormalization2 = BatchNormalization()
@@ -65,8 +66,8 @@ class Model(Model):
 
         self.d7 = Dense(16*16*32, activation='relu', kernel_regularizer=regularizers.l2(0.001))
         self.reshape = Reshape((16,16,32)) 
-        self.deconv1 = Conv2DTranspose(64, 3, padding='same', activation='relu')
-        self.deconv2 = Conv2DTranspose(128, 3, padding='same', activation='relu')
+        self.deconv1 = Conv2DTranspose(128, 3, padding='same', activation='relu')
+        self.deconv2 = Conv2DTranspose(64, 3, padding='same', activation='relu')
         self.deconv3 = Conv2DTranspose(3, 3, padding='same')
         self.upsample1 = UpSampling2D(2)
         self.upsample2 = UpSampling2D(2)
@@ -113,6 +114,7 @@ class Model(Model):
 
         # observation deconvolution
         z = self.d7(flattened)
+        #z = self.dropout5(z)
         z = self.reshape(z) 
         z = self.deconv1(z)
         z = self.upsample1(z)

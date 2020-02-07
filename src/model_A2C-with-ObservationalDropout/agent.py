@@ -17,7 +17,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-3, reconstruction_c=1e-2):
+    def __init__(self, model, lr=1e-3, gamma=0.999, value_c=0.01, entropy_c=1e-2, reconstruction_c=1e-4):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -75,6 +75,8 @@ class Agent:
                 # observational dropout
                 if (np.random.uniform() > peek_prob):
                     next_obs = reconstructions[step]
+                    next_obs = np.maximum(next_obs, -1)
+                    next_obs = np.minimum(next_obs, 1)
                     #plt.imshow((next_obs-np.min(next_obs))/(np.ptp(next_obs)))
                     #plt.show()
 
@@ -240,7 +242,7 @@ def main():
 
     with tf.Graph().as_default():
         # initialize environment and deep model
-        env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, distribution_mode="easy") 
+        env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
         model = Model.Model(env.action_space.n)
         obs = env.reset()
         agent = Agent(model)
