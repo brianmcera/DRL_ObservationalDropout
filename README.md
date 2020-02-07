@@ -1,13 +1,15 @@
-# Insight_Project_Framework
-Framework for machine learning projects at Insight Data Science.
+# Deep Reinforcement Learning with Observational Dropout
+Dockerized Tensorflow 2.0 implementation of *Observational Dropout* in OpenAI's new procedurally generated Procgen environment.
 
-## Motivation for this project format:
-- **Insight_Project_Framework** : Put all source code for production within structured directory
-- **tests** : Put all source code for testing in an easy to find location
-- **configs** : Enable modification of all preset variables within single directory (consisting of one or many config files for separate tasks)
-- **data** : Include example a small amount of data in the Github repository so tests can be run to validate installation
-- **build** : Include scripts that automate building of a standalone environment
-- **static** : Any images or content to include in the README or web framework if part of the pipeline
+To learn more about Google Brain's research on Observational Dropout, check out this [direct link to their github page](https://learningtopredict.github.io/ "Observational Dropout"). 
+
+## Organization for this project repo:
+- **src** : Source code for production within structured directory
+- **tests** : Source code for testing 
+- **configs** : Preset model variables within single directory 
+- **data** : Small amount of data in the Github repository so tests can be run to validate installation
+- **build** : Scripts that automate building of a standalone environment
+- **static** : Images or content for the README 
 
 ## Setup
 Clone repository and update python path
