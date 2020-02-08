@@ -16,7 +16,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-5, gamma=0.999, value_c=0.5, entropy_c=1e-2):
+    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.5, entropy_c=1e-3):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -59,7 +59,7 @@ class Agent:
                 if(random_action):
                     actions[step], values[step] = self.model.action_value(
                             combined_obs[None,:])
-                    #actions[step] = env.action_space.sample()
+                    actions[step] = env.action_space.sample()
                 else:
                     actions[step], values[step] = self.model.action_value(
                             combined_obs[None,:])
@@ -71,7 +71,6 @@ class Agent:
                 if dones[step]:
                     _, next_value = self.model.action_value(
                             combined_obs[None,:])
-                    rewards[step] += 1
                     if(not random_action):
                         # don't bootstrap first (random) run 
                         rewards[step] += next_value
@@ -221,14 +220,20 @@ def main():
     # test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
 
     with tf.Graph().as_default():
         model = Model.Model(env.action_space.n)
         obs = env.reset()
         agent = Agent(model)
         
-        rewards_history = agent.train(env, updates=1, batch_sz=batch_sz, random_action=True, show_visual=args.visual, show_first=args.show_first)
+        print('\nRandom Trajectories Cold Start...')
+        rewards_history = agent.train(
+                env, updates=1, 
+                batch_sz=batch_sz, 
+                random_action=True, 
+                show_visual=args.visual, 
+                show_first=args.show_first)
         rewards_means = np.array([np.mean(rewards_history[:-1])])
         rewards_stds = np.array([np.std(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()

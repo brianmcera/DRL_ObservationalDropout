@@ -16,11 +16,11 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-4, gamma=0.99, value_c=1.0, entropy_c=1e-1):
+    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.01, entropy_c=1e-3):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
@@ -184,6 +184,20 @@ class Agent:
 
         return policy_loss - self.entropy_c*entropy_loss
 
+    def _logits_loss_PPO(self, actions_and_advantages, logits):
+        actions, advantages, logits = tf.split(actions_advantages_logits, 3, axis=-1)
+
+        weighted_sparse_ce = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+
+        actions = tf.cast(actions, tf.int32)
+        policy_loss = weighted_sparse_ce(actions, logits, sample_weight=advantages)
+
+        probs = tf.nn.softmax(logits)
+        # trick here - entropy can be calculated as crossentropy on itself
+        entropy_loss = tf.keras.losses.categorical_crossentropy(probs, probs)
+
+        return policy_loss - self.entropy_c*entropy_loss
+
 def main():
     parser = argparse.ArgumentParser(description='RL training parameters')
     parser.add_argument('-v', '--visual', default=False, action='store_true')
@@ -220,7 +234,7 @@ def main():
     # test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
 
     with tf.Graph().as_default():
         model = Model.Model(env.action_space.n)
@@ -238,7 +252,7 @@ def main():
         rewards_stds = np.array([np.std(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()
 
-        #agent.model.load_weights('pretrained_examples/' + '20200207-155008_4200000')
+        #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
         iter_count = 0
         for _ in range(args.total_steps):
             iter_count += 1

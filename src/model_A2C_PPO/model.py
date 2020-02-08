@@ -28,9 +28,9 @@ class ResidualBlock(layers.Layer):
 class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
-        self.conv1 = Conv2D(64, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
-        self.conv2 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
-        self.conv3 = Conv2D(128, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
+        self.conv1 = Conv2D(16, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
+        self.conv2 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
+        self.conv3 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.001), kernel_initializer='he_uniform')
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2)
