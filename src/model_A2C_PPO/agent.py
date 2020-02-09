@@ -16,21 +16,22 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=1e-4, gamma=0.999, value_c=0.01, entropy_c=1e-3):
+    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range = 0.2):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.SGD(learning_rate=lr)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.5)
         self.gamma = gamma
         self.img_mean = 0
         self.img_std = 1
+        self.clip_range = clip_range
         
         #compile model
         self.model = model
         self.model.compile(
                 optimizer=self.optimizer,
                 loss=[
-                    self._logits_loss, # actor loss
+                    self._logits_loss_PPO, # actor loss
                     self._value_loss   # critic loss
                     ],
                 loss_weights=[1,1])
@@ -38,6 +39,7 @@ class Agent:
     def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
+        neglogprobs_prev = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
         observations = np.empty((batch_sz,) + env.observation_space.shape)
         observations = np.concatenate((observations,observations), axis=-1)
@@ -45,7 +47,7 @@ class Agent:
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
         next_obs = env.reset().astype(np.float64)
-        next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
+        next_obs = next_obs/256.0#(next_obs-self.img_mean)/self.img_std
         prev_obs = next_obs.copy()
         print('\n\nRunning episodes...')
         first_run = True
@@ -57,15 +59,15 @@ class Agent:
                 if(show_visual or (show_first and first_run)):
                     env.render()
                 if(random_action):
-                    actions[step], values[step] = self.model.action_value(
+                    actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
-                    actions[step] = env.action_space.sample()
+                    #actions[step] = env.action_space.sample()
                 else:
-                    actions[step], values[step] = self.model.action_value(
+                    actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
-                next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
+                next_obs = next_obs/256.0  #(next_obs-self.img_mean)/self.img_std
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
@@ -76,7 +78,7 @@ class Agent:
                         rewards[step] += next_value
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
-                    next_obs = (next_obs-128.0)/256#(next_obs-self.img_mean)/self.img_std
+                    next_obs = next_obs/256.0  #(next_obs-self.img_mean)/self.img_std
                     prev_obs = next_obs.copy()
                     first_run = False
                     #logging.info("Episode: %03d, Reward: %03d" % (
@@ -100,17 +102,22 @@ class Agent:
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
+            acts_advs_and_neglogprobs = np.concatenate([actions[:, None], advs[:, None], neglogprobs_prev[:,None]], axis=-1)
+
+            # A trick to input returns and previous predicted values through same API
+            returns_and_prev_values = np.concatenate([returns[:, None], values[:, None]], axis=-1)
 
             # Disregard incomplete runs at head/tail
             idx = np.argwhere(dones==1)
             first_index = idx[0][0]
             last_index = idx[-1][0]
 
-            # Decimate observations (similar observations)
+            # Trim/Decimate observations (similar observations)
             skip = 1
             observations = observations[first_index+1:last_index:skip]
-            returns = returns[first_index+1:last_index:skip]
+            returns_and_prev_values = returns_and_prev_values[first_index+1:last_index:skip]
             acts_and_advs = acts_and_advs[first_index+1:last_index:skip]
+            acts_advs_and_neglogprobs = acts_advs_and_neglogprobs[first_index+1:last_index:skip]
 
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
@@ -118,13 +125,13 @@ class Agent:
             if(random_action):
                 for _ in range(1):
                     self.model.fit(observations,
-                            [acts_and_advs, returns],
+                            [acts_advs_and_neglogprobs, returns_and_prev_values],
                             shuffle=True,
                             batch_size=256,
                             epochs=1)
             else:
                 self.model.fit(observations,
-                        [acts_and_advs, returns],
+                        [acts_advs_and_neglogprobs, returns_and_prev_values],
                         shuffle=True,
                         batch_size=256,
                         epochs=1)
@@ -166,9 +173,15 @@ class Agent:
         advantages = returns - values # advantage over Critic estimates
         return returns, advantages
 
-    def _value_loss(self, returns, value):
+    def _value_loss(self, returns_and_prev_values, value):
         # this function calculates loss with value TD error
-        return self.value_c*tf.keras.losses.mean_squared_error(returns,value)
+        returns, prev_values = tf.split(returns_and_prev_values, 2, axis=-1)
+        # clip value to reduce variability during Critic training
+        vpredclipped = prev_values + tf.clip_by_value(value - prev_values, -self.clip_range, self.clip_range)
+        #return self.value_c*tf.keras.losses.mean_squared_error(returns,value)
+        v_losses1 = tf.square(value - returns)
+        v_losses2 = tf.square(vpredclipped - returns)
+        return self.value_c*tf.reduce_mean(tf.maximum(v_losses1, v_losses2))
 
     def _logits_loss(self, actions_and_advantages, logits):
         actions, advantages = tf.split(actions_and_advantages, 2, axis=-1)
@@ -184,19 +197,24 @@ class Agent:
 
         return policy_loss - self.entropy_c*entropy_loss
 
-    def _logits_loss_PPO(self, actions_and_advantages, logits):
-        actions, advantages, logits = tf.split(actions_advantages_logits, 3, axis=-1)
+    def _logits_loss_PPO(self, actions_advantages_neglogprobs, logits):
+        actions, advantages, neglogprobs_old = tf.split(actions_advantages_neglogprobs, 3, axis=-1)
 
-        weighted_sparse_ce = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+        neglogprobs_old = tf.squeeze(neglogprobs_old)
+        actions = tf.squeeze(tf.cast(actions, tf.int32))
+        advantages = tf.squeeze(advantages)
+        neglogprobs_new = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=actions)
+        ratio = tf.exp(neglogprobs_old - neglogprobs_new)  # note order of subtraction, due to *negative* log probabilities
+        pg_loss1 = -advantages*ratio
+        pg_loss2 = -advantages*tf.clip_by_value(ratio, 1.0 - self.clip_range, 1.0 + self.clip_range)
+        policy_loss = tf.reduce_mean(tf.maximum(pg_loss1, pg_loss2))
 
-        actions = tf.cast(actions, tf.int32)
-        policy_loss = weighted_sparse_ce(actions, logits, sample_weight=advantages)
-
+        # Calculate policy entropy - entropy can be calculated as crossentropy on itself
         probs = tf.nn.softmax(logits)
-        # trick here - entropy can be calculated as crossentropy on itself
         entropy_loss = tf.keras.losses.categorical_crossentropy(probs, probs)
 
         return policy_loss - self.entropy_c*entropy_loss
+
 
 def main():
     parser = argparse.ArgumentParser(description='RL training parameters')

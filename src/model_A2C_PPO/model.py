@@ -8,7 +8,9 @@ from tensorflow.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPool2D, 
 class ProbabilityDistribution(Model):
     def call(self, logits, **kwargs):
         # sample a categorical action given logits
-        return tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
+        action = tf.squeeze(tf.random.categorical(logits, 1), axis=-1)
+        neglogprob = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=action)
+        return action, neglogprob
 
 class ResidualBlock(layers.Layer):
     def __init__(self):
@@ -109,6 +111,11 @@ class Model(Model):
 
     def action_value(self, obs):
         logits, value = self.predict_on_batch(obs)
-        action = self.dist.predict_on_batch(logits)
+        action, _ = self.dist.predict_on_batch(logits)
         #action = tf.random.categorical(logits,1)
         return np.squeeze(action, axis=-1), np.squeeze(value, axis=-1)
+
+    def action_value_neglogprob(self, obs):
+        logits, value = self.predict_on_batch(obs)
+        action, neglogprob = self.dist.predict_on_batch(logits)
+        return np.squeeze(action, axis=-1), np.squeeze(value, axis=-1), neglogprob
