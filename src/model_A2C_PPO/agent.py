@@ -16,12 +16,13 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range = 0.2):
+    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range=0.1, lam=0.9):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr, clipnorm=0.5)
         self.gamma = gamma
+        self.lam = lam
         self.img_mean = 0
         self.img_std = 1
         self.clip_range = clip_range
@@ -61,7 +62,7 @@ class Agent:
                 if(random_action):
                     actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
-                    #actions[step] = env.action_space.sample()
+                    actions[step] = env.action_space.sample()
                 else:
                     actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
@@ -75,7 +76,7 @@ class Agent:
                             combined_obs[None,:])
                     if(not random_action):
                         # don't bootstrap first (random) run 
-                        rewards[step] += next_value
+                        rewards[step] += self.gamma*next_value
                     ep_rewards.append(0.0)
                     next_obs = env.reset().astype(np.float64)
                     next_obs = next_obs/256.0  #(next_obs-self.img_mean)/self.img_std
@@ -90,7 +91,7 @@ class Agent:
             else:
                 next_value = np.array([0])
 
-            returns, advs = self._returns_advantages(
+            returns, advs = self._returns_GAE_advantages(
                     rewards, dones, values, next_value)
             print('Average Advantage:')
             print(np.mean(advs))
@@ -173,6 +174,23 @@ class Agent:
         advantages = returns - values # advantage over Critic estimates
         return returns, advantages
 
+    def _returns_GAE_advantages(self, rewards, dones, values, next_value):
+        # 'next value' is the bootstrapped returned value from the Critic
+        returns = np.append(np.zeros_like(rewards), next_value, axis=-1)
+        values = np.append(values, next_value, axis=-1)
+        advantages = np.zeros_like(values)
+        lastgaelam = 0
+
+        for t in reversed(range(len(rewards))):
+            delta = rewards[t] + self.gamma*values[t+1]*(1-dones[t]) - values[t]
+            advantages[t] = lastgaelam = delta + self.gamma*self.lam*(1-dones[t])*lastgaelam # double check (1-dones) here
+
+        returns = advantages + values
+        returns = returns[:-1] # all but last
+        advantages = advantages[:-1]
+        #advantages = returns - values # advantage over Critic estimates
+        return returns, advantages
+
     def _value_loss(self, returns_and_prev_values, value):
         # this function calculates loss with value TD error
         returns, prev_values = tf.split(returns_and_prev_values, 2, axis=-1)
@@ -200,9 +218,9 @@ class Agent:
     def _logits_loss_PPO(self, actions_advantages_neglogprobs, logits):
         actions, advantages, neglogprobs_old = tf.split(actions_advantages_neglogprobs, 3, axis=-1)
 
-        neglogprobs_old = tf.squeeze(neglogprobs_old)
-        actions = tf.squeeze(tf.cast(actions, tf.int32))
-        advantages = tf.squeeze(advantages)
+        neglogprobs_old = tf.squeeze(neglogprobs_old, axis=-1)
+        actions = tf.squeeze(tf.cast(actions, tf.int32), axis=-1)
+        advantages = tf.squeeze(advantages, axis=-1)
         neglogprobs_new = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=actions)
         ratio = tf.exp(neglogprobs_old - neglogprobs_new)  # note order of subtraction, due to *negative* log probabilities
         pg_loss1 = -advantages*ratio
@@ -270,7 +288,7 @@ def main():
         rewards_stds = np.array([np.std(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()
 
-        #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
+        #agent.model.load_weights('pretrained_examples/' + '20200210-072456_5600000')
         iter_count = 0
         for _ in range(args.total_steps):
             iter_count += 1
