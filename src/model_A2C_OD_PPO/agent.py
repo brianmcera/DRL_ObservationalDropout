@@ -11,6 +11,7 @@ import pdb
 import random
 import argparse
 from tqdm import tqdm
+import csv
 
 import model as Model
 import utils
@@ -285,30 +286,35 @@ def main():
 
         #agent.model.load_weights('pretrained_examples/' + '20200204-183104_350000')
         iter_count = 0
-        while True:
-            iter_count += 1
-            rewards_history = agent.train(env, 
-                    batch_sz=batch_sz, 
-                    show_visual=args.visual, 
-                    show_first=args.show_first)
-            rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
-            rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-            plt.plot(rewards_means)
-            plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-            plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-            plt.draw()
-            # plt.pause(1e-3)
-            print('Total Sim Steps: ' + str(sim_steps))
-            print('Number of levels: ' + str(len(rewards_history)))
-            print('Epoch mean reward: ')
-            print(rewards_means)
-            print('Epoch std reward: ')
-            print(rewards_stds)
-            sim_steps += batch_sz
-            current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            if(iter_count%10==0):
-                model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
-                        save_format='tf')
+        start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        with open('logs/' + start_time +'.csv', mode='w') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',')
+            csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std'])
+            while True:
+                iter_count += 1
+                rewards_history = agent.train(env, 
+                        batch_sz=batch_sz, 
+                        show_visual=args.visual, 
+                        show_first=args.show_first)
+                sim_steps += batch_sz
+                rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+                rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
+                plt.plot(rewards_means)
+                plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+                plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+                plt.draw()
+                # plt.pause(1e-3)
+                print('Total Sim Steps: ' + str(sim_steps))
+                print('Number of levels: ' + str(len(rewards_history)))
+                print('Epoch mean reward: ')
+                print(rewards_means)
+                print('Epoch std reward: ')
+                print(rewards_stds)
+                current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                csv_writer.writerow([str(sim_steps), str(len(rewards_history)), str(rewards_means[-1]), str(rewards_stds[-1])])
+                if(iter_count%10==0):
+                    model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
+                            save_format='tf')
         print('Finished Training, testing now...')
 
         return
