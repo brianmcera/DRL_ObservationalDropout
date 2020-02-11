@@ -10,13 +10,14 @@ import pdb
 import random
 import argparse
 from tqdm import tqdm
+import csv
 
 import model as Model
 import utils
 
 
 class Agent:
-    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range = 0.2):
+    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range = 0.2, num_PPO_epochs=3):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -25,6 +26,7 @@ class Agent:
         self.img_mean = 0
         self.img_std = 1
         self.clip_range = clip_range
+        self.num_PPO_epochs = num_PPO_epochs
         
         #compile model
         self.model = model
@@ -61,7 +63,7 @@ class Agent:
                 if(random_action):
                     actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
-                    #actions[step] = env.action_space.sample()
+                    actions[step] = env.action_space.sample()
                 else:
                     actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
@@ -128,13 +130,13 @@ class Agent:
                             [acts_advs_and_neglogprobs, returns_and_prev_values],
                             shuffle=True,
                             batch_size=256,
-                            epochs=1)
+                            epochs=self.num_PPO_epochs)
             else:
                 self.model.fit(observations,
                         [acts_advs_and_neglogprobs, returns_and_prev_values],
                         shuffle=True,
                         batch_size=256,
-                        epochs=1)
+                        epochs=self.num_PPO_epochs)
 
             # Print out distribution of Actions, useful for debugging during training
             print('Action distribution for batch:')
@@ -200,9 +202,9 @@ class Agent:
     def _logits_loss_PPO(self, actions_advantages_neglogprobs, logits):
         actions, advantages, neglogprobs_old = tf.split(actions_advantages_neglogprobs, 3, axis=-1)
 
-        neglogprobs_old = tf.squeeze(neglogprobs_old)
-        actions = tf.squeeze(tf.cast(actions, tf.int32))
-        advantages = tf.squeeze(advantages)
+        neglogprobs_old = tf.squeeze(neglogprobs_old, axis=-1)
+        actions = tf.squeeze(tf.cast(actions, tf.int32), axis=-1)
+        advantages = tf.squeeze(advantages, axis=-1)
         neglogprobs_new = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits, labels=actions)
         ratio = tf.exp(neglogprobs_old - neglogprobs_new)  # note order of subtraction, due to *negative* log probabilities
         pg_loss1 = -advantages*ratio
@@ -272,30 +274,35 @@ def main():
 
         #agent.model.load_weights('pretrained_examples/' + '20200204-085944_5400000')
         iter_count = 0
-        for _ in range(args.total_steps):
-            iter_count += 1
-            rewards_history = agent.train(env, 
-                    batch_sz=batch_sz, 
-                    show_visual=args.visual, 
-                    show_first=args.show_first)
-            rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
-            rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-            plt.plot(rewards_means)
-            plt.plot(np.array(rewards_means)+np.array(rewards_stds))
-            plt.plot(np.array(rewards_means)-np.array(rewards_stds))
-            plt.draw()
-            # plt.pause(1e-3)
-            print('Total Sim Steps: ' + str(sim_steps))
-            print('Number of levels: ' + str(len(rewards_history)))
-            print('Epoch mean reward: ')
-            print(rewards_means)
-            print('Epoch std reward: ')
-            print(rewards_stds)
-            sim_steps += batch_sz
-            current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-            if(iter_count%10==0):
-                model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
-                        save_format='tf')
+        start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        with open('logs/' + start_time + '.csv', mode='w') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',')
+            csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std'])
+            for _ in range(args.total_steps):
+                iter_count += 1
+                rewards_history = agent.train(env, 
+                        batch_sz=batch_sz, 
+                        show_visual=args.visual, 
+                        show_first=args.show_first)
+                sim_steps += batch_sz
+                rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+                rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
+                plt.plot(rewards_means)
+                plt.plot(np.array(rewards_means)+np.array(rewards_stds))
+                plt.plot(np.array(rewards_means)-np.array(rewards_stds))
+                plt.draw()
+                # plt.pause(1e-3)
+                print('Total Sim Steps: ' + str(sim_steps))
+                print('Number of levels: ' + str(len(rewards_history)))
+                print('Epoch mean reward: ')
+                print(rewards_means)
+                print('Epoch std reward: ')
+                print(rewards_stds)
+                current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                csv_writer.writerow([str(sim_steps), str(len(rewards_history)), str(rewards_means[-1]), str(rewards_stds[-1])])
+                if(iter_count%10==0):
+                    model.save_weights('weights/' + current_time + '_' + str(sim_steps), 
+                            save_format='tf')
         print('Finished Training, testing now...')
 
         return
