@@ -1,6 +1,7 @@
 # Deep Reinforcement Learning with Observational Dropout
 Dockerized Tensorflow 2.0 implementation of *Observational Dropout* in OpenAI's new procedurally generated Procgen environment released in December 2019.
 
+This repo 
 To learn more about Google Brain's research on Observational Dropout, check out this [direct link to their github page](https://learningtopredict.github.io/ "Observational Dropout"). 
 
 ## Organization for this project repo:
@@ -15,10 +16,10 @@ To learn more about Google Brain's research on Observational Dropout, check out 
 - Python 3
 - Tensorflow 2.0
 - NVIDIA GPU & CUDA cuDNN
-- OpenAI Gym 
-- OpenAI Procgen
+- [OpenAI Gym](https://gym.openai.com/)
+- [OpenAI Procgen](https://openai.com/blog/procgen-benchmark/)
 - Conda (Anaconda or Miniconda)
-- [Streamlit](streamlit.io)
+- [Streamlit](https://www.streamlit.io/)
 
 ## Setup
 ### Installation
@@ -37,11 +38,6 @@ To learn more about Google Brain's research on Observational Dropout, check out 
     git clone https://github.com/brianmcera/DRL_ObservationalDropout.git
     cd DRL_ObservationalDropout
     ```
- - Create new development branch and switch onto it
-```
-branch_name=dev-readme_requisites-20180905 # Name of development branch, of the form 'dev-feature_name-date_of_creation'}}
-git checkout -b $branch_name
-```
 
 ## Build Environment
 - Include instructions of how to launch scripts in the build subfolder
