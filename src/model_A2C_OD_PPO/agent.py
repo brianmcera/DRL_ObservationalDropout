@@ -18,7 +18,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=0.5, clip_range=0.1, num_PPO_epochs=3):
+    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=0.5, clip_range=0.2, num_PPO_epochs=3, lam=0.95):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -29,6 +29,7 @@ class Agent:
         self.img_std = 1
         self.clip_range = clip_range
         self.num_PPO_epochs = num_PPO_epochs
+        self.lam = lam
         
         #compile model
         self.model = model
@@ -49,7 +50,7 @@ class Agent:
         observations = np.concatenate((observations,observations), axis=-1)
         reconstructions = np.empty((batch_sz,) + env.observation_space.shape)
 
-        peek_prob = 0.5
+        peek_prob = 1.0
 
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
@@ -189,12 +190,29 @@ class Agent:
         returns = returns[:-1] # all but last
         advantages = returns - values # advantage over Critic estimates
         return returns, advantages
+    
+    def _returns_GAE_advantages(self, rewards, dones, values, next_value):
+        # 'next value' is the bootstrapped returned value from the Critic
+        returns = np.append(np.zeros_like(rewards), next_value, axis=-1)
+        values = np.append(values, next_value, axis=-1)
+        advantages = np.zeros_like(values)
+        lastgaelam = 0
+
+        for t in reversed(range(len(rewards))):
+            delta = rewards[t] + self.gamma*values[t+1]*(1-dones[t]) - values[t]
+            advantages[t] = lastgaelam = delta + self.gamma*self.lam*(1-dones[t])*lastgaelam # double check (1-dones) here
+
+        returns = advantages + values
+        returns = returns[:-1] # all but last
+        advantages = advantages[:-1]
+        #advantages = returns - values # advantage over Critic estimates
+        return returns, advantages
 
     def _reconstruction_loss(self, reconstruction_and_advantages, nn_reconstruction):
         reconstruction, advantages = tf.split(reconstruction_and_advantages, 2, axis=-1)
         weighted_MSE = tf.keras.losses.MeanSquaredError()
         reconstruction_loss = weighted_MSE(reconstruction, nn_reconstruction, sample_weight=advantages)
-        return self.reconstruction_c*reconstruction_loss 
+        return tf.clip_by_value(self.reconstruction_c*reconstruction_loss, -1e-2, 1e-2)
 
     def _value_loss(self, returns_and_prev_values, value):
         # this function calculates loss with value TD error
