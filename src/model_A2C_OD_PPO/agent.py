@@ -50,7 +50,7 @@ class Agent:
         observations = np.concatenate((observations,observations), axis=-1)
         reconstructions = np.empty((batch_sz,) + env.observation_space.shape)
 
-        peek_prob = 1.0
+        peek_prob = 0.9
 
         # Training loop: collect samples, send to optimizer, repeat updates times.
         ep_rewards = [0.0]
@@ -291,7 +291,7 @@ def main():
 
     with tf.Graph().as_default():
         # initialize environment and deep model
-        env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
+        env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
         model = Model.Model(env.action_space.n)
         obs = env.reset()
         agent = Agent(model)
