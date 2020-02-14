@@ -17,7 +17,7 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range=0.1, lam=0.9, num_PPO_epochs=3):
+    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=1.0, entropy_c=1e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -57,7 +57,7 @@ class Agent:
         for update in range(updates):
             for step in tqdm(range(batch_sz)):
                 combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
-                prev_obs = next_obs
+                prev_obs = next_obs.copy()
                 observations[step] = combined_obs.copy()
                 if(show_visual or (show_first and first_run)):
                     env.render()
@@ -130,13 +130,13 @@ class Agent:
                     self.model.fit(observations,
                             [acts_advs_and_neglogprobs, returns_and_prev_values],
                             shuffle=True,
-                            batch_size=256,
+                            batch_size=2048,
                             epochs=self.num_PPO_epochs)
             else:
                 self.model.fit(observations,
                         [acts_advs_and_neglogprobs, returns_and_prev_values],
                         shuffle=True,
-                        batch_size=256,
+                        batch_size=2048,
                         epochs=self.num_PPO_epochs)
 
             # Print out distribution of Actions, useful for debugging during training
@@ -190,7 +190,6 @@ class Agent:
         returns = advantages + values
         returns = returns[:-1] # all but last
         advantages = advantages[:-1]
-        #advantages = returns - values # advantage over Critic estimates
         return returns, advantages
 
     def _value_loss(self, returns_and_prev_values, value):
@@ -272,7 +271,7 @@ def main():
     # test_summary_writer = tf.summary.create_file_writer(test_log_dir)
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
 
     with tf.Graph().as_default():
         model = Model.Model(env.action_space.n)
@@ -290,7 +289,7 @@ def main():
         rewards_stds = np.array([np.std(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()
 
-        #agent.model.load_weights('pretrained_examples/' + '20200210-072456_5600000')
+        #agent.model.load_weights('pretrained_examples/' + '20200212-062819_4000000')
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         with open('logs/' + start_time + '.csv', mode='w') as csv_file:

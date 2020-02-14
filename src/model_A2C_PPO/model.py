@@ -89,21 +89,21 @@ class Model(Model):
 
         # actor dense layers
         x = self.d1(flattened)
-        x = self.dropout1(x)
+        #x = self.dropout1(x)
         #x = tf.expand_dims(x,-1)
         #x = self.LSTM1(x)
         x = self.d2(x)
-        #x = self.d3(x)
+        x = self.d3(x)
         #x = self.batchnormalization4(x)
         #x = self.dropout2(x)
 
         # critic dense layers
         y = self.d4(flattened)
-        y = self.dropout3(y)
+        #y = self.dropout3(y)
         #y = tf.expand_dims(y,-1)
         #y = self.LSTM2(y)
         y = self.d5(y)
-        #y = self.d6(y)
+        y = self.d6(y)
         #y = self.batchnormalization5(y)
         #y = self.dropout4(y)
 
