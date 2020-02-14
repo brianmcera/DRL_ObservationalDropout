@@ -14,15 +14,21 @@ To learn more about Google Brain's research on Observational Dropout, check out 
 
 ## Prerequisites
 - Python 3
-- Tensorflow 2.0
 - NVIDIA GPU & CUDA cuDNN
 - [OpenAI Gym](https://gym.openai.com/)
 - [OpenAI Procgen](https://openai.com/blog/procgen-benchmark/)
 - Conda (Anaconda or Miniconda)
 - [Streamlit](https://www.streamlit.io/)
 
+## Tensorflow Versions
+This repo supports Tensorflow 2.0 and 2.1 exclusively. 
+
 ## Setup
 ### Installation
+- If you don't have Tensorflow 2.0 already, install using the following (gpu recommended):
+    ```
+    pip install tensorflow-gpu==2.1  # if you have a CUDA-compatible GPU and proper drivers
+    ```
 - Install OpenAI Gym and Procgen
     ```bash
     pip install gym
@@ -38,25 +44,6 @@ To learn more about Google Brain's research on Observational Dropout, check out 
     git clone https://github.com/brianmcera/DRL_ObservationalDropout.git
     cd DRL_ObservationalDropout
     ```
-
-## Build Environment
-- Include instructions of how to launch scripts in the build subfolder
-- Build scripts can include shell scripts or python setup.py files
-- The purpose of these scripts is to build a standalone environment, for running the code in this repository
-- The environment can be for local use, or for use in a cloud environment
-- If using for a cloud environment, commands could include CLI tools from a cloud provider (i.e. gsutil from Google Cloud Platform)
-```
-# Example
-
-# Step 1
-# Step 2
-```
-
-## Configs
-- We recommond using either .yaml or .txt for your config files, not .json
-- **DO NOT STORE CREDENTIALS IN THE CONFIG DIRECTORY!!**
-- If credentials are needed, use environment variables or HashiCorp's [Vault](https://www.vaultproject.io/)
-
 
 ## Test
 - Include instructions for how to run all tests after the software is installed
