@@ -106,7 +106,7 @@ class Agent:
             else:
                 next_value = np.array([0])
 
-            returns, advs = self._returns_advantages(
+            returns, advs = self._returns_GAE_advantages(
                     rewards, dones, values, next_value)
 
             # normalize advantages for numerical stability
