@@ -18,8 +18,8 @@ class ResidualBlock(layers.Layer):
         
     def build(self, input_shape):
         self.relu = layers.ReLU()
-        self.conv1 = Conv2D(input_shape[-1], 5, activation='sigmoid', padding='same', kernel_regularizer=regularizers.l2(0.000))
-        self.conv2 = Conv2D(input_shape[-1], 5, padding='same', kernel_regularizer=regularizers.l2(0.000))
+        self.conv1 = Conv2D(input_shape[-1], 3, activation='relu', padding='same', kernel_regularizer=regularizers.l2(0.000))
+        self.conv2 = Conv2D(input_shape[-1], 3, padding='same', kernel_regularizer=regularizers.l2(0.000))
 
     def call (self, inputs):
         x = self.relu(inputs)
@@ -30,9 +30,9 @@ class ResidualBlock(layers.Layer):
 class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
-        self.conv1 = Conv2D(16, 5, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
-        self.conv2 = Conv2D(32, 5, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
-        self.conv3 = Conv2D(32, 5, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv1 = Conv2D(16, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv2 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv3 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2, padding='same')
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2, padding='same')
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2, padding='same')
@@ -43,10 +43,10 @@ class Model(Model):
         self.res5 = ResidualBlock()
         self.res6 = ResidualBlock()
         self.flatten = Flatten()
-        self.d1 = Dense(128, activation='sigmoid', kernel_regularizer=regularizers.l2(1e-3))
+        self.d1 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(1e-3))
         #self.d2 = Dense(100, activation='sigmoid', kernel_regularizer=regularizers.l1(1e-3))
         #self.d3 = Dense(100, activation='sigmoid', kernel_regularizer=regularizers.l1(1e-3))
-        self.d4 = Dense(128, activation='sigmoid', kernel_regularizer=regularizers.l2(1e-3))
+        self.d4 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(1e-3))
         #self.d5 = Dense(100, activation='sigmoid', kernel_regularizer=regularizers.l1(1e-3))
         #self.d6 = Dense(100, activation='sigmoid', kernel_regularizer=regularizers.l1(1e-3))
         #self.dropout1 = Dropout(rate=0.5)

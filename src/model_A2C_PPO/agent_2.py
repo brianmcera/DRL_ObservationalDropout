@@ -18,17 +18,23 @@ import utils
 
 
 class Agent:
-    def __init__(self, model, lr=5e-4, gamma=0.999, value_c=1.0, entropy_c=5e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3):
+    def __init__(self, model, total_steps, lr=5e-4, gamma=0.999, value_c=1.0, entropy_c=1e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=1024):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr, epsilon=1e-5)
+        lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+                initial_learning_rate = lr, 
+                decay_steps = total_steps // batch_sz * num_PPO_epochs,
+                end_learning_rate = 1e-6,
+                power = 1.0)
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-5)
         self.gamma = gamma
         self.lam = lam
         self.img_mean = 0
         self.img_std = 1
         self.clip_range = clip_range
         self.num_PPO_epochs = num_PPO_epochs
+        self.batch_size = batch_sz
         
         #compile model
         self.model = model
@@ -99,16 +105,16 @@ class Agent:
 
             returns, advs = self._returns_GAE_advantages(rewards, dones, values, next_value)
 
-            # # remove outliers with respect to advantage estimates 
-            # adv_mean = np.mean(advs)
-            # adv_std = np.std(advs)
-            # idx = np.logical_and(advs > adv_mean - 3*adv_std, advs < adv_mean + 3*adv_std)
-            # advs = advs[idx]
-            # actions = actions[idx]
-            # neglogprobs_prev = neglogprobs_prev[idx]
-            # returns = returns[idx]
-            # values = values[idx]
-            # observations = observations[idx]
+            # remove outliers with respect to advantage estimates 
+            adv_mean = np.mean(advs)
+            adv_std = np.std(advs)
+            idx = np.logical_and(advs > adv_mean - 3*adv_std, advs < adv_mean + 3*adv_std)
+            advs = advs[idx]
+            actions = actions[idx]
+            neglogprobs_prev = neglogprobs_prev[idx]
+            returns = returns[idx]
+            values = values[idx]
+            observations = observations[idx]
 
             print('Average Advantage: ' + str(np.mean(advs)))
             print('Advantage STD: ' + str(np.std(advs)))
@@ -119,8 +125,8 @@ class Agent:
             print(np.histogram(advs)[1]) 
 
             # normalize advantages for numerical stability
-            #advs -= np.mean(advs)
-            #advs /= np.std(advs) + 1e-6
+            advs -= np.mean(advs)
+            advs /= np.std(advs) + 1e-6
 
             # A trick to input actions and advantages through same API.
             acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
@@ -144,18 +150,19 @@ class Agent:
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
+            #print('Current optimizer learning rate: ', str(self.optimizer.learning_rate))
             if(tb_callback):
                 self.model.fit(observations,
                         [acts_advs_and_neglogprobs, returns_and_prev_values],
                         shuffle=True,
-                        batch_size=1024,
+                        batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs,
                         callbacks=[tb_callback])
             else:
                 self.model.fit(observations,
                         [acts_advs_and_neglogprobs, returns_and_prev_values],
                         shuffle=True,
-                        batch_size=1024,
+                        batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs)
 
             # Print out distribution of Actions, useful for debugging during training
@@ -286,7 +293,7 @@ def main():
     batch_sz = args.batch_size
 
     # initialize environment and deep model
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=1, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=1, distribution_mode="easy") 
 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
@@ -297,7 +304,7 @@ def main():
 
         model = Model.Model(env.action_space.n)
         obs = env.reset()
-        agent = Agent(model)
+        agent = Agent(model, args.total_steps)
         
         print('\nRandom Trajectories Cold Start...')
         rewards_history = agent.train(
@@ -326,6 +333,7 @@ def main():
                         show_visual=args.visual, 
                         show_first=args.show_first,
                         tb_callback=tensorboard_callback)
+                agent.entropy_c *= 0.99  # reduce entropy over iterations
                 sim_steps += batch_sz
                 rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
                 rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
