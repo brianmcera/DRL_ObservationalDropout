@@ -174,14 +174,24 @@ class Agent:
                 ', STD probabilities: ' + str(np.std(np.exp(-neglogprobs_prev))))
         return ep_rewards, policy_entropy
 
-    def test(self, env, render=True):
-        obs, done, ep_reward = env.reset(), False, 0
-        while not done:
-            action, _ = self.model.action_value(obs.astype(np.float32)[None,:])
-            obs, reward, done, info = env.step(action)
-            ep_reward += reward
-            if render:
+    def test(self, env, num_steps=5000, render=True):
+        total_reward = 0
+        next_obs = env.reset().astype(np.float64)
+        next_obs = (next_obs)/256.0
+        prev_obs = next_obs.copy()
+        for step in tqdm(range(num_steps)):
+            combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
+            prev_obs = next_obs.copy()
+            if(render):
                 env.render()
+            action, _, _ = self.model.action_value_neglogprob(combined_obs[None,:])
+            next_obs, reward, done, _ = env.step(action)
+            next_obs = next_obs.astype(np.float64)
+            next_obs = (next_obs)/256.0
+
+            total_reward += reward
+            if done:
+                break
         return reward
 
     def _returns_MonteCarlo_advantages(self, rewards, dones, values, next_value):
@@ -268,7 +278,7 @@ def main():
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=1, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-bigfish-v0", num_levels=1, start_level=1, distribution_mode="easy") 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
         # set up tensorboard logging
@@ -293,7 +303,7 @@ def main():
         graph = tf.compat.v1.get_default_graph()
         if False:
             print('Loading pre-trained weights~~~')
-            agent.model.load_weights('pretrained_examples/' + 'starpilot_random_5400000')
+            agent.model.load_weights('weights/' + '20200219-165156_2800000')
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         with open('logs/' + start_time + '.csv', mode='w') as csv_file:
