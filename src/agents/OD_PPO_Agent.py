@@ -278,6 +278,7 @@ def main():
                         show_first=args.show_first,
                         tb_callback=tensorboard_callback)
                 agent.entropy_c *= 0.99  # reduce entropy over iterations
+                agent.peek_prob = (1 - 0.95*(1 - agent.peek_prob))
                 sim_steps += batch_sz
                 rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
                 rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
