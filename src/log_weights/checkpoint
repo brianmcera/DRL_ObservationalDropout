@@ -1,2 +1,2 @@
-model_checkpoint_path: "20200220-155521_A2C_SharedCNN_600000"
-all_model_checkpoint_paths: "20200220-155521_A2C_SharedCNN_600000"
+model_checkpoint_path: "20200220-173631_A2C_SharedCNN_OD_200000"
+all_model_checkpoint_paths: "20200220-173631_A2C_SharedCNN_OD_200000"

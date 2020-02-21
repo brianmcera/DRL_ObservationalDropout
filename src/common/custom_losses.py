@@ -63,15 +63,16 @@ class Agent_Wrapper(object):
         entropy_loss = tf.keras.losses.categorical_crossentropy(probs, probs)
         return policy_loss - self.entropy_c*entropy_loss
     
-    def _normalize_advantages(self, advs, actions, neglogprobs_prev, returns, values, observations):
+    def _reconstruction_loss(self, reconstruction_advantages_mask, nn_reconstruction):
+        reconstruction, advantages, mask = tf.split(reconstruction_advantages_mask, 3, axis=-1)
+        weighted_MSE = tf.keras.losses.MeanSquaredError()
+        reconstruction_loss = weighted_MSE(reconstruction, nn_reconstruction, 
+                sample_weight=advantages*mask)
+        return tf.clip_by_value(self.reconstruction_c*reconstruction_loss, -1e-2, 1e-2)
+
+    def _normalize_advantages(self, advs):
         # Remove outliers with respect to advantage estimates 
         adv_mean = np.mean(advs)
         adv_std = np.std(advs)
         idx = np.logical_and(advs > adv_mean - 3*adv_std, advs < adv_mean + 3*adv_std)
-        advs = advs[idx]
-        actions = actions[idx]
-        neglogprobs_prev = neglogprobs_prev[idx]
-        returns = returns[idx]
-        values = values[idx]
-        observations = observations[idx]
-        return advs, actions, neglogprobs_prev, returns, values, observations
+        return idx
