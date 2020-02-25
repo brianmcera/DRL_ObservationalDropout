@@ -34,7 +34,7 @@ class Agent(Agent_Wrapper):
         self.num_PPO_epochs = num_PPO_epochs
         self.batch_size = batch_sz
         self.reconstruction_c = reconstruction_c
-        self.peek_prob = 0.9
+        self.peek_prob = 0.5
         
         #compile model
         self.model = model
@@ -239,7 +239,7 @@ def main():
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-chaser-v0", num_levels=1, start_level=0, distribution_mode="easy") 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
         # set up tensorboard logging

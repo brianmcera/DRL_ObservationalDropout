@@ -11,21 +11,21 @@ import argparse
 from tqdm import tqdm
 import csv
 import sys, os 
-sys.path.append('../common')
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 from custom_losses import Agent_Wrapper
-sys.path.append('../models')
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'models'))
 import A2C_Shared_CNN as Model
 
 
 class Agent(Agent_Wrapper):
-    def __init__(self, model, total_steps, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=1024):
+    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=2048):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
                 initial_learning_rate = lr, 
                 decay_steps = total_steps // batch_sz * num_PPO_epochs,
-                end_learning_rate = 1e-6,
+                end_learning_rate = 1e-4,
                 power = 1.0)
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-5)
         self.gamma = gamma
@@ -98,10 +98,12 @@ class Agent(Agent_Wrapper):
                 _, next_value = self.model.action_value(combined_obs[None,:])
             else:
                 next_value = np.array([0])
+
             returns, advs = self._returns_GAE_advantages(rewards, dones, values, next_value)
-            advs, actions, neglogprobs_prev, returns, values, observations = \
-                    self._normalize_advantages(advs, actions, neglogprobs_prev, 
-                    returns, values, observations)
+
+            # advs, actions, neglogprobs_prev, returns, values, observations = \
+            #         self._normalize_advantages(advs, actions, neglogprobs_prev, 
+            #         returns, values, observations)
 
             # Print out useful training metrics
             print('Average Advantage: ' + str(np.mean(advs)))
@@ -117,7 +119,6 @@ class Agent(Agent_Wrapper):
             advs /= np.std(advs) + 1e-6
 
             # A trick to input actions, advantages, and log probabilities through same API
-            acts_and_advs = np.concatenate([actions[:, None], advs[:, None]], axis=-1)
             acts_advs_and_neglogprobs = np.concatenate([actions[:, None], advs[:, None], neglogprobs_prev[:,None]], axis=-1)
 
             # A trick to input returns and previous predicted values through same API
@@ -212,7 +213,7 @@ def main():
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=1, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
         # set up tensorboard logging

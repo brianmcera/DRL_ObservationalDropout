@@ -31,9 +31,9 @@ class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
         self.model_name = 'A2C_SharedCNN'
-        self.conv1 = Conv2D(16, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
-        self.conv2 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
-        self.conv3 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv1 = Conv2D(16, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv2 = Conv2D(32, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
+        self.conv3 = Conv2D(32, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))#, kernel_initializer='he_uniform')
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2, padding='same')
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2, padding='same')
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2, padding='same')
@@ -44,11 +44,11 @@ class Model(Model):
         self.res5 = ResidualBlock()
         self.res6 = ResidualBlock()
         self.flatten = Flatten()
-        self.d1 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(1e-3))
-        self.d4 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(1e-3))
+        self.d1 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0e-3))
+        self.d4 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0e-3))
         self.dist = ProbabilityDistribution()
-        self.logits = Dense(ac_dim, name='policy_logits', kernel_regularizer=regularizers.l2(1e-3))
-        self.value = Dense(1, name='value', kernel_regularizer=regularizers.l2(1e-3))
+        self.logits = Dense(ac_dim, name='policy_logits', kernel_regularizer=regularizers.l2(0e-3))
+        self.value = Dense(1, name='value', kernel_regularizer=regularizers.l2(0e-3))
         self.relu = ReLU()
 
     def call(self, inputs):
@@ -65,7 +65,7 @@ class Model(Model):
         i = self.res5(i)
         i = self.res6(i)
         flattened = self.flatten(i)
-        flattened = self.relu(flattened)
+        #flattened = self.relu(flattened)
 
         # actor dense layers
         x = self.d1(flattened)
