@@ -43,7 +43,7 @@ class Agent(Agent_Wrapper):
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False, tb_callback=None):
+    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False, tb_callback=None, sl_fcn=None, sl_obj=None):
         # Storage helpers for a single batch of data.
         actions = np.empty((batch_sz,))
         logits = np.empty((batch_sz, env.action_space.n))
@@ -66,6 +66,8 @@ class Agent(Agent_Wrapper):
                 observations[step] = combined_obs.copy()
                 if(show_visual or (show_first and first_run)):
                     env.render()
+                if sl_fcn:
+                    sl_fcn(sl_obj, env, 0)
                 if(random_action):
                     _, values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
                             combined_obs[None,:])
@@ -133,7 +135,6 @@ class Agent(Agent_Wrapper):
             skip = 1
             observations = observations[first_index+1:last_index+1:skip]
             returns_and_prev_values = returns_and_prev_values[first_index+1:last_index+1:skip]
-            acts_and_advs = acts_and_advs[first_index+1:last_index+1:skip]
             acts_advs_and_neglogprobs = acts_advs_and_neglogprobs[first_index+1:last_index+1:skip]
 
             # Performs a full training step on the collected batch.

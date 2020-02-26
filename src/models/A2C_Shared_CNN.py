@@ -65,15 +65,17 @@ class Model(Model):
         i = self.res5(i)
         i = self.res6(i)
         flattened = self.flatten(i)
-        #flattened = self.relu(flattened)
+        flattened = self.relu(flattened)
 
         # actor dense layers
-        x = self.d1(flattened)
-        logits = self.logits(x)
+        #x = self.d1(flattened)
+        #logits = self.logits(x)
+        logits = self.logits(flattened)
 
         # critic dense layers
-        y = self.d4(flattened)
-        value = self.value(y)
+        #y = self.d4(flattened)
+        #value = self.value(y)
+        value = self.value(flattened)
 
         return logits, value  
 
