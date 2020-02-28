@@ -18,14 +18,14 @@ import A2C_OD_SharedCNN as Model
 
 
 class Agent(Agent_Wrapper):
-    def __init__(self, model, total_steps, lr=5e-4, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=0.5, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=1024):
+    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=0.5, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=2048):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
                 initial_learning_rate = lr, 
                 decay_steps = total_steps // batch_sz * num_PPO_epochs,
-                end_learning_rate = 1e-6,
+                end_learning_rate = 1e-5,
                 power = 1.0)
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-5)
         self.gamma = gamma
@@ -113,16 +113,16 @@ class Agent(Agent_Wrapper):
                 next_value = np.array([0])
             returns, advs = self._returns_GAE_advantages(rewards, dones, values, next_value)
 
-            # Remove outliers with respect to advantages
-            idx = self._normalize_advantages(advs)
-            advs = advs[idx]
-            actions = actions[idx]
-            neglogprobs_prev = neglogprobs_prev[idx]
-            returns = returns[idx]
-            values = values[idx]
-            observations = observations[idx]
-            reconstructions = reconstructions[idx]
-            reconstr_mask = reconstr_mask[idx]
+            # # Remove outliers with respect to advantages
+            # idx = self._normalize_advantages(advs)
+            # advs = advs[idx]
+            # actions = actions[idx]
+            # neglogprobs_prev = neglogprobs_prev[idx]
+            # returns = returns[idx]
+            # values = values[idx]
+            # observations = observations[idx]
+            # reconstructions = reconstructions[idx]
+            # reconstr_mask = reconstr_mask[idx]
 
             # Print out useful training metrics
             print('Average Advantage: ' + str(np.mean(advs)))
@@ -191,6 +191,11 @@ class Agent(Agent_Wrapper):
             print(np.ptp(logits, axis=0))
             print('Mean probabilities of actions:' + str(np.mean(np.exp(-neglogprobs_prev))) +
                 ', STD probabilities: ' + str(np.std(np.exp(-neglogprobs_prev))))
+
+            plt.imshow((reconstructions[-1]- np.min(reconstructions[-1])) / np.ptp(reconstructions[-1]))
+            plt.show(block=False)
+            plt.draw()
+            time.sleep(0.5)
         return ep_rewards, policy_entropy
 
     def test(self, env, num_steps=5000, render=True):
@@ -239,7 +244,7 @@ def main():
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-chaser-v0", num_levels=1, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
         # set up tensorboard logging
@@ -267,6 +272,7 @@ def main():
             agent.model.load_weights('../pretrained_examples/' + 'starpilot_stage0_A2C_SharedCNN_OD_200000')
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        clip_rate = 0.2
         with open('../logs/' + start_time + '_' + model.model_name + '.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',')
             csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std', 'entropy'])
@@ -278,7 +284,9 @@ def main():
                         show_first=args.show_first,
                         tb_callback=tensorboard_callback)
                 agent.entropy_c *= 0.99  # reduce entropy over iterations
-                agent.peek_prob = (1 - 0.95*(1 - agent.peek_prob))
+                #agent.peek_prob = (1 - 0.95*(1 - agent.peek_prob))
+                agent.clip_range = clip_rate*(1 - sim_steps/args.total_steps)  # reduce clip range over iterations
+                print('Current Entropy Coeff: {}, Current Clip Range: {}, Peek Probability: {}'.format(agent.entropy_c, agent.clip_range, agent.peek_prob))
                 sim_steps += batch_sz
                 rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
                 rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))

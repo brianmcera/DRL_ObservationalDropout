@@ -32,9 +32,9 @@ class Model(Model):
     def __init__(self, ac_dim):
         super(Model, self).__init__()
         self.model_name = 'A2C_SharedCNN_OD'
-        self.conv1 = Conv2D(16, 3, kernel_regularizer=regularizers.l2(0.000))
-        self.conv2 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))
-        self.conv3 = Conv2D(32, 3, kernel_regularizer=regularizers.l2(0.000))
+        self.conv1 = Conv2D(16, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))
+        self.conv2 = Conv2D(32, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))
+        self.conv3 = Conv2D(32, 3, padding='same', kernel_regularizer=regularizers.l2(0.000))
         self.maxpool1 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool2 = MaxPool2D(pool_size=3, strides=2)
         self.maxpool3 = MaxPool2D(pool_size=3, strides=2)
@@ -45,16 +45,16 @@ class Model(Model):
         self.res5 = ResidualBlock()
         self.res6 = ResidualBlock()
         self.flatten = Flatten()
-        self.d1 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001))
+        self.d1 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.000))
         self.d4 = Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001))
         self.dist = ProbabilityDistribution()
-        self.logits = Dense(ac_dim, name='policy_logits', kernel_regularizer=regularizers.l2(1e-3))
-        self.value = Dense(1, name='value', kernel_regularizer=regularizers.l2(1e-3))
+        self.logits = Dense(ac_dim, name='policy_logits', kernel_regularizer=regularizers.l2(0e-3))
+        self.value = Dense(1, name='value', kernel_regularizer=regularizers.l2(0e-3))
 
-        self.d7 = Dense(16*16*32, activation='relu', kernel_regularizer=regularizers.l2(0.001))
-        self.reshape = Reshape((16,16,32)) 
-        self.deconv1 = Conv2DTranspose(32, 3, padding='same', activation='relu')
-        self.deconv2 = Conv2DTranspose(32, 3, padding='same', activation='relu')
+        self.d7 = Dense(16*16*16, activation='relu', kernel_regularizer=regularizers.l2(0.000))
+        self.reshape = Reshape((16,16,16)) 
+        self.deconv1 = Conv2DTranspose(16, 3, padding='same', activation='relu')
+        self.deconv2 = Conv2DTranspose(16, 3, padding='same', activation='relu')
         self.deconv3 = Conv2DTranspose(3, 3, padding='same')
         self.upsample1 = UpSampling2D(2)
         self.upsample2 = UpSampling2D(2)
@@ -75,12 +75,13 @@ class Model(Model):
         i = self.res6(i)
         flattened = self.flatten(i)
         flattened = self.relu(flattened)
+        flattened = self.d1(flattened)
 
         # actor dense layers
-        x = self.d1(flattened)
+        #x = self.d1(flattened)
 
         # critic dense layers
-        y = self.d4(flattened)
+        #y = self.d4(flattened)
 
         # observation deconvolution
         z = self.d7(flattened)
@@ -91,7 +92,7 @@ class Model(Model):
         z = self.upsample2(z)
         z = self.deconv3(z) 
 
-        return self.logits(x), self.value(y), tf.expand_dims(z, axis=-1)
+        return self.logits(flattened), self.value(flattened), tf.expand_dims(z, axis=-1)
 
     def action_value(self, obs):
         logits, value, _ = self.predict_on_batch(obs)

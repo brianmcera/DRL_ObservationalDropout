@@ -25,7 +25,7 @@ class Agent(Agent_Wrapper):
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
                 initial_learning_rate = lr, 
                 decay_steps = total_steps // batch_sz * num_PPO_epochs,
-                end_learning_rate = 1e-4,
+                end_learning_rate = 1e-5,
                 power = 1.0)
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-5)
         self.gamma = gamma
@@ -186,7 +186,7 @@ class Agent(Agent_Wrapper):
             total_reward += reward
             if done:
                 break
-        return reward
+        return total_reward
 
 
 def main():
@@ -237,14 +237,15 @@ def main():
         rewards_min = np.array([np.amin(rewards_history[:-1])])
         rewards_max = np.amax([np.amax(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()
-        if False:
+        if True:
             print('Loading pre-trained weights~~~')
-            agent.model.load_weights('weights/' + '20200219-165156_2800000')
+            agent.model.load_weights('../pretrained_examples/' + '20200227-starpilot_randomstage_lineardecayCR_30k_A2C_SharedCNN_4800000')
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         with open('../logs/' + start_time + '_' + model.model_name + '.csv', mode='w') as csv_file:
             csv_writer = csv.writer(csv_file, delimiter=',')
             csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std', 'entropy'])
+            clip_rate = 0.2
             for _ in range(args.total_steps // args.batch_size + 1):
                 iter_count += 1
                 rewards_history, policy_entropy = agent.train(env, 
@@ -253,6 +254,8 @@ def main():
                         show_first=args.show_first,
                         tb_callback=tensorboard_callback)
                 agent.entropy_c *= 0.99  # reduce entropy over iterations
+                agent.clip_range = clip_rate*(1 - sim_steps/args.total_steps)  # reduce clip range over iterations
+                print('Current Entropy Coeff: {}, Current Clip Range: {}'.format(agent.entropy_c, agent.clip_range))
                 sim_steps += batch_sz
                 rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
                 rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
