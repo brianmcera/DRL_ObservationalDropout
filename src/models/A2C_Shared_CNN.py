@@ -66,6 +66,7 @@ class Model(Model):
         i = self.res6(i)
         flattened = self.flatten(i)
         flattened = self.relu(flattened)
+        flattened = self.d1(flattened)
 
         # actor dense layers
         #x = self.d1(flattened)
