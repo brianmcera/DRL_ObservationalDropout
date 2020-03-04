@@ -14,6 +14,8 @@ Despite this, Reinforcement Learning has struggled to become as widely adopted i
 
 In leveraging this new simulation environment, this project investigates an interesting approach called *Observational Dropout* to see if forcing RL agents to use 'imagined' future states can lead to more generalizable behavior even with limited sampled data. This more challenging operating condition can be representative of situations where observational sensor data might be difficult or expensive to acquire and can highlight some of the challenges regarding sample efficiency and domain transfer with Reinforcement Learning.
 
+![Observational Dropout Flow](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/OD_model.png) 
+
 ## Organization for this project repo:
 - **src** : Source code for production within structured directory
 - **tests** : Scripts for testing 
