@@ -11,154 +11,175 @@ pip install -r requirements.txt
 from the top-level project folder.
 """
 
+import tensorflow as tf
 import streamlit as st
 import numpy as np
 import gym
 import time
+import sys
+import os
+import argparse
+import csv
+from tqdm import tqdm
+import datetime
 from procgen import interactive
+sys.path.append(os.path.join(os.path.dirname(__file__), 'agents'))
+from PPO_Agent import Agent
+sys.path.append(os.path.join(os.path.dirname(__file__), 'models'))
+import A2C_Shared_CNN as Model
+sys.path.append(os.path.join(os.path.dirname(__file__), 'common'))
+import custom_losses as Agent_Wrapper
 
+@st.cache
 def render_gym(st_object, env, episode, width=400):
     img = env.render(mode='rgb_array')
     caption = "Episode " + str(episode)
     st_object.image(img, caption = caption, width = width)
     return st_object
 
+def streamlit_test(agent, env, streamlit_ob, num_steps=5000):
+    total_reward = 0
+    next_obs = env.reset().astype(np.float64)
+    next_obs = (next_obs)/256.0
+    prev_obs = next_obs.copy()
+    for step in tqdm(range(num_steps)):
+        combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
+        prev_obs = next_obs.copy()
+        render_gym(streamlit_ob, env, 0)
+        action, _, _ = agent.model.action_value_neglogprob(combined_obs[None,:])
+        next_obs, reward, done, _ = env.step(action)
+        next_obs = next_obs.astype(np.float64)
+        next_obs = (next_obs)/256.0
 
-a2c_mean = np.array(
-[ 0.372, 0.14,  0.716, 1.695, 2.642, 3.508, 0.562, 2.364, 0.147, 0.446
-, 1.925, 3.613, 3.714, 1.791, 3.607, 2.341, 2.449, 4.456, 1.725, 4.206
-, 4.174, 4.984, 3.873, 2.432, 4.482, 1.122, 4.13,  4.692, 3.,    3.857
-, 3.494, 2.577, 5.879, 5.034, 1.48,  3.949, 5.79,  4.632, 3.917, 6.839
-, 3.97,  5.477, 4.677, 4.169, 6.293, 5.207, 2.034, 5.82,  6.204, 3.
-, 5.621, 6.684, 5.621, 6.219, 3.881, 2.181, 2.489, 5.29,  6.254, 3.533
-, 5.9,  4.643, 5.015, 4.135, 6.525, 4.625, 5.569, 5.231, 3.478, 3.976
-, 6.281, 6.31,  4.373, 4.589, 6.016, 5.848, 6.508, 5.579, 6.2, 6.509
-, 6.517, 4.081, 6.121, 4.284, 2.032, 5.576, 7.235, 6.625, 6.115, 5.642
-, 7.204, 5.767, 5.333, 6.219, 5.644, 5.703, 4.139, 4.303, 7.121, 5.953
-, 6.,    6.77,  7.528, 7.736, 6.796, 5.358, 5.179, 6.877, 6.724, 7.
-, 8.,   5.766, 5.841, 7.154, 7.389, 7.093, 7.353, 5.836, 7.034, 6.27
-, 7.155, 6.75,  7.491, 6.083, 5.561, 6.621, 6.387, 6.197, 6.564, 5.42
-, 6.897, 7.792, 5.629, 5.908, 7.766, 6.911, 5.708, 6.048, 7.123, 6.54
-, 6.426, 6.097, 4.928, 7.909, 8.157, 6.712, 6.117, 4.845, 6.227, 6.661
-, 6.915, 8.052, 7.138, 6.061, 6.333, 4.519, 8.408, 7.069, 7.053, 7.
-, 7.436, 4.72,  8.38,  6.754, 5.458, 8.041, 7.754, 8.2,  8.096, 6.159
-, 7.868, 8.102, 7.13,  8.783, 8.064, 5.867, 4.309, 7.386, 7.862, 8.059
-, 5.422, 7.275, 8.617, 9.545, 9.409, 7.96,  6.786, 6.39,  6.873, 8.021
-, 8.38,  7.281, 7.096, 5.597, 8.622, 8.149, 6.707, 4.681, 8.727, 7.105
-, 8.151, 6.262, 6.316, 8.521, 7.589, 8.188, 6.897, 8.458, 6.627, 8.286
-, 4.833, 5.93,  8.06,  6.596, 4.986, 3.143, 8.12,  8.75,  8.5 , 7.4
-, 5.561, 7.815, 6.93,  3.068, 9.279, 8.778, 6.684, 6.597, 7.596, 3.785
-, 6.737, 8.388, 7.278, 7.151, 9.289, 9.976, 10.14,  8.608, 9.222, 5.869
-, 5.891, 8.809, 8.816, 8.755, 8.771, 8.326, 7.51,  8.412, 7.281, 4.75
-, 6.85,  8.917, 5.831, 6.579, 8.388, 9.065, 8.314, 6.964, 8.163, 6.873
-, 8.521, 8.814, 9.614, 8.204, 6.483, 10.268, 8.265, 7.396, 5.677, 5.855
-, 8.46,  8.633, 6.879, 5.338, 8.077, 7.755, 7.31,  5.057, 4.789, 5.132
-, 6.03,  6.333, 5.264, 7.491, 8.208, 6.857, 10.167, 9.5,  8.038, 7.962
-, 9.744, 9.791, 7.545, 7.25,  7.943, 6.912, 9.13,  9.457, 7.444, 9.467
-, 8.094, 6.095, 11.054, 8.17,  7.889, 8.111, 8.58,  4.871, 6.883, 9.
-, 8.5,  10.775, 5.188, 3.69,  5.667, 8.396, 9.065, 9.386, 9.25,  8.755
-, 7.214, 8.143, 9.042, 7.37,  9.587, 8.064, 8.077, 9.778, 10.067, 9.886
-, 8.643, 5.343, 7.518, 8.34,  7.377, 5.103, 4.76,  6.219, 6.75,  7.22
-, 7.632, 10.575, 9.5,  8.,   6.508, 5.908, 9.81,  8.288, 8.17,  9.689
-, 8.562, 5.186, 6.754, 8.212, 10.975, 6.579, 6.25,  7.446, 8.647, 10.698
-, 10.643, 7.463, 8.745, 8.654, 9.078, 10.,   8.5,  9.383, 8.491, 10.136
-, 9.542, 11.024, 9.1,  9.745, 6.869, 5.361, 7.407, 7.466, 6.967, 6.613
-, 7.439, 8.796, 9.95,  10.614, 7.596, 8.12,  6.627, 7.172, 6.203, 5.984
-, 6.95,  9.86,  5.719, 1.29,  6.613, 8.16,  7.981, 6.783, 7.131, 9.426
-, 9.289, 8.  ,  6.323, 7.036, 10.159, 8.241, 8.294, 6.867, 4.506, 4.282
-, 8.24,  9.75,  8.569, 11.154, 10.093, 6.426, 6.109, 8.294, 9.354, 9.188
-, 8.385, 7.855, 9.041, 8.264, 8.373, 6.27,  8.377, 9.795, 8.4,  9.889
-, 10.512, 9.767, 5.563, 9.689, 7.875, 6.41,  5.851, 7.203, 7.643, 7.081
-, 9.,   8.537, 7.526,  8.264, 6.484, 9.638, 8.667, 9.49,  9.348, 9.6
-, 11.421, 9.705, 8.308, 5.859, 7.824, 6.052, 4.958, 5.261, 8.574, 9.848
-, 9.609, 11.05,  8.176, 9.267, 8.151, 6.077, 10.738, 10.104, 10.881, 8.25
-, 6.468, 7.889, 8.321, 9.02,  9.184, 10.605, 10.707, 10.565, 9.574, 7.172
-, 1.119, 6.831, 10.341, 5.13,  6.828, 5.718, 8.148, 8.125, 6.966, 6.338
-, 7.83,  6.694, 7.446, 6.121, 7.69, 10.095, 8.49,  7.554, 8.058, 8.235
-, 9.312, 8.415, 6.787, 7.439, 7.455, 7.164, 10.093, 10.205, 9.021, 8.76
-, 9.04,  6.565, 2.306, 0.5, 1.025, 3.444, 5.364, 6.382, 7.333, 6.27
-, 8.979, 6.983, 8.132, 7.193, 8.255, 9.531, 7.088, 7.411, 7.926, 8.608
-, 8.3,   10.568, 8.218, 7.667, 10.256, 10.795, 9.216, 10.533, 9.212, 7.69
-, 6.778, 4.713, 6.435, 8.,  10.725, 6.333, 5.609, 10.659, 12.5,  12.743
-, 8.635, 8.143, 10.419, 11.756, 11.872, 7.153, 7.119, 6.885, 4.759, 8.885
-, 8.057, 9.891, 8.725, 6.984, 6.949, 7.305, 7.368, 8.185, 6.855, 7.113
-, 8.415, 9.622, 9.429, 10.13, 10.341, 9.28,  7.316, 6.597, 5.943, 7.828
-, 9.958, 9.84,  8.519, 8.885, 6.478, 4.936, 4.095, 4.89, 10.37, 10.227
-, 8.898, 8.269, 8.236, 9.717, 9.383, 8.66,  7.034, 7.167, 6.593, 4.986
-, 10.283, 9.702, 9.915, 8.882, 10.244, 9.224, 10.304, 10.591, 7.086, 6.906
-, 5.681,  10.14,  9.54,  9.851, 8.393, 4.926, 5.066, 9.302, 8.491, 6.087
-, 7.746, 8.377, 7.544, 7.603, 7.982, 6.478, 8.741, 7.27,  7.842, 5.507
-, 7.35,  6.448, 9.532, 9.24,  9.122, 6.761, 7.283, 7.194, 8.76,  4.42
-, 6.188, 8.765, 10.689, 9.229, 6.825, 4.659, 5.417, 9.469, 7.371, 6.224
-, 7.237, 8.057, 5.069, 7.649, 8.396, 9.52, 10.674, 9.059, 7.31,  7.2
-, 7.617, 9.74,  9.333, 8.491, 6.698, 5.377, 6.25,  5.333, 9.02,  8.519
-, 7.911, 5.105, 4.855, 7.534, 7.862, 7.508, 6.569, 7.426, 5.845, 6.333
-, 6.423, 8.685, 7.661, 6.983, 9.043, 4.868, 4.816, 6.615, 6.515, 8.529
-, 10.422, 8.125, 6.785, 7.1,  8.241, 9.638, 8.765, 9.28, 11.047, 10.977
-, 7.724, 7.786, 7.288, 5.025, 4.517, 6.099, 6.667, 7.767, 6.841, 9.872
-, 9.809, 7.655, 8.,   7.617, 9.294, 9.075, 8.679, 9.542, 9.096, 6.525
-, 5.862, 4.948, 6.091, 8.385, 8.537, 8.125, 10.174, 10.558, 10.429, 9.326
-, 9.1,   6.767, 6.508, 10.217, 10.156, 8.704, 7.75,  8.796, 8.107, 8.286
-, 7.571, 9.776, 9.176, 9.612, 6.803, 7.737, 8.034, 6.104, 6.952, 8.214
-, 8.415, 6.319, 6.385, 6.879, 7.05,  7.373, 7.098, 6.703, 8.509, 8.854
-, 8.283, 7.2,  5.,   5.155, 10.682, 9.692, 4.896, 6.014, 0.451, 2.237
-, 7.789, 4.092, 6.71,  9.689, 11.744, 9.143, 6.902, 5.447, 6.646, 4.737
-, 6.015, 4.616, 6.477, 6.731, 9.042, 9.689, 7.311, 8.091, 6.781, 8.308
-, 9.551, 9.2,  8.51,  8.5 , 5.667, 6.014, 8.415, 8.585, 7.579, 6.938
-, 6.171, 7.424, 7.034, 6.015, 5.913, 5.181, 5.899, 12.154, 14.364, 9.896
-, 7.6,  5.297, 6.877, 7.596, 5.147, 6.754, 9.54,  9.184, 9.872, 10.786
-, 7.696, 8.635, 8.17, 10.312, 9.42,  6.769, 8.309, 9.49,  6.742, 4.602
-, 7.078, 7.541, 10.872, 9.935, 7.375, 6.841, 7.845, 8.667, 6.507, 7.831
-, 7.279, 7.845, 7.164, 7.323, 7.062, 9.019])
-
-a2c_OD_mean = np.array(
-        [0.47, 0.49, 0.37, 0.44, 0.46, 0.41, 0.37, 0.51, 0.32, 0.49, 0.4,  0.69, 0.42, 0.44,
- 0.39, 0.72, 0.72, 0.53, 0.72, 0.94, 1.17, 1.01, 2.07, 3.07, 3.46, 1.2,  0.96, 1.08,
- 1.41, 2.23, 2.57, 3.77, 4.84, 3.,   3.62, 3.49, 4.55, 4.02, 4.33, 3.89, 3.88, 3.95,
- 3.39, 3.89, 4.44, 4.43, 4.23, 4.94, 4.79, 4.57, 4.6,  4.62, 4.52, 4.39, 4.54, 4.77,
- 4.18, 5.14, 4.78, 4.64, 4.71, 5.69, 2.38, 2.33, 2.42, 3.22, 3.6,  3.98, 3.71, 3.43,
- 3.61, 4.17, 4.75, 5.43, 4.23, 4.46, 4.81, 4.09, 4.08, 4.46, 4.81, 5.12, 4.26, 4.32,
- 4.98, 5.44, 4.13, 4.76, 4.98, 4.3,  4.72, 4.57, 4.61, 5.02, 5.67,5.75, 4.49, 5.34,
- 5.82, 5.14, 4.75, 5.38, 5.4,  5.58, 3.76, 3.48, 3.92, 3.79, 4.62, 4.77, 5.69, 4.75,
- 5.16, 4.94, 4.66, 5.45, 4.95, 4.98, 5.15, 5.35, 5.24, 5.16, 5.35, 5.42, 5.67, 5.19,
- 5.26, 6.15, 4.76, 5.28, 5.56, 5.72, 5.23, 5.81, 4.98, 5.5,  5.2,  5.94, 5.57, 5.38,
- 5.43, 5.17, 5.23, 4.72, 5.34, 5.62, 5.34, 5.63, 5.4, 5.62, 5.88, 5.34, 5.7,  5.37,
- 5.9, 5.4,  6.29, 5.6,  5.37, 5.07, 5.5,  6.18])
-
-st.line_chart(a2c_mean)
-st.line_chart(a2c_OD_mean)
-
-
-st.title('Deep Reinforcement Learning with Observational Dropout')
-
-st.write('This is a scratchpad for *Streamlit.* **Edit it and see what happens!**')
-
-st.write('check')
-
-#interactive.main()
-
-st_object = st.empty()
-env = gym.make('procgen:procgen-starpilot-v0')
-
-for episode in range(10):
-    env.reset()
-    j = 0
-    done = False
-    while j < 99:
-        j += 1
-        render_gym(st_object, env, episode)
-        action = env.action_space.sample()
-        observation, reward, done, info = env.step(action)
+        total_reward += reward
         if done:
             break
-        #time.sleep(0.02)
-env.close()
+    return reward
 
-st.subheader('A Numpy Array')
+def main():
+    st.title('Deep Reinforcement Learning with Observational Dropout')
 
-st.write(np.random.randn(10, 10))
+    st.write('This is a *Streamlit* Demo of the Deep Reinforcement Learning policies with visualizations of some important training metrics')
+    st_object = st.empty()
 
-st.subheader('A Graph!')
+    parser = argparse.ArgumentParser(description='RL training parameters')
+    parser.add_argument('-v', '--visual', default=False, action='store_true')
+    parser.add_argument('-bs', '--batch_size', type=int, default=5000)
+    parser.add_argument('-sf', '--show_first', default=False, action='store_true')
+    parser.add_argument('-l', '--local', default=False, action='store_true')
+    parser.add_argument('-ts', '--total_steps', type=int, default=int(5e6))
+    args = parser.parse_args()
+    np.set_printoptions(precision=3)
+
+    # enable dynamic GPU memory allocation
+    physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    assert len(physical_devices) > 0
+    if args.local:
+        print('Training on local GPU, limit memory allocation')
+        tf.config.experimental.set_memory_growth(physical_devices[0], True)
+        tf.config.experimental.set_virtual_device_configuration(
+                physical_devices[0],
+                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4000)])
+    sim_steps = 0
+    batch_sz = args.batch_size
+    # Initialize OpenAI Procgen environment 
+    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
+    with tf.Graph().as_default():
+        # set up tensorboard logging
+        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = 'logs/tensorboard/' + current_time
+        tensorboard_callback = None 
+        model = Model.Model(env.action_space.n)
+        obs = env.reset()
+        agent = Agent(model, args.total_steps)
+        print('\nRandom Trajectories Cold Start...')
+        rewards_history, _ = agent.train(
+                env, updates=1, 
+                batch_sz=batch_sz, 
+                random_action=True, 
+                show_visual=args.visual, 
+                show_first=args.show_first,
+                tb_callback=None,
+                sl_fcn=render_gym,
+                sl_obj=st_object)
+        streamlit_test(agent, env, st_object)
+        rewards_means = np.array([np.mean(rewards_history[:-1])])
+        rewards_stds = np.array([np.std(rewards_history[:-1])])
+        rewards_min = np.array([np.amin(rewards_history[:-1])])
+        rewards_max = np.amax([np.amax(rewards_history[:-1])])
+        graph = tf.compat.v1.get_default_graph()
+        if False:
+            print('Loading pre-trained weights~~~')
+            agent.model.load_weights('weights/' + '20200219-165156_2800000')
+        iter_count = 0
+        start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        with open('logs/' + start_time + '_' + model.model_name + '.csv', mode='w') as csv_file:
+            csv_writer = csv.writer(csv_file, delimiter=',')
+            csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std', 'entropy'])
+            for _ in range(args.total_steps // args.batch_size + 1):
+                iter_count += 1
+                rewards_history, policy_entropy = agent.train(env, 
+                        batch_sz=batch_sz, 
+                        show_visual=args.visual, 
+                        show_first=args.show_first,
+                        tb_callback=tensorboard_callback)
+                agent.entropy_c *= 0.99  # reduce entropy over iterations
+                sim_steps += batch_sz
+                rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
+                rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
+                rewards_min = np.append(rewards_min, np.amin(rewards_history[:-1]))
+                rewards_max = np.append(rewards_max, np.amax(rewards_history[:-1]))
+                print('Total Sim Steps: ' + str(sim_steps))
+                print('Number of levels: ' + str(len(rewards_history)))
+                print('Epoch mean reward: ')
+                print(rewards_means[-10:])
+                print('Epoch std reward: ')
+                print(rewards_stds[-10:])
+                print('Epoch max reward: ')
+                print(rewards_max[-10:])
+                current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+                csv_writer.writerow([str(sim_steps), str(len(rewards_history)), str(rewards_means[-1]), 
+                    str(rewards_stds[-1]), str(policy_entropy)])
+                if(iter_count%10 == 0):
+                    model.save_weights('log_weights/' + current_time + '_' + model.model_name + '_' + str(sim_steps), 
+                            save_format='tf')
+        print('Finished Training, testing now...')
+        return
+
+def main2():
+    st.line_chart(a2c_mean)
+    st.line_chart(a2c_OD_mean)
 
 
+    st.title('Deep Reinforcement Learning with Observational Dropout')
+
+    st.write('This is a *Streamlit* Demo of the Deep Reinforcement Learning policies with visualizations of some important training metrics')
+
+    #interactive.main()
+
+    st_object = st.empty()
+    env = gym.make('procgen:procgen-starpilot-v0')
+
+    for episode in range(10):
+        env.reset()
+        j = 0
+        done = False
+        for step in tqdm(range(150)):
+            j += 1
+            render_gym(st_object, env, episode)
+            action = env.action_space.sample()
+            observation, reward, done, info = env.step(action)
+            if done:
+                break
+            #time.sleep(0.02)
+    env.close()
+
+    st.subheader('A Numpy Array')
+
+    st.write(np.random.randn(10, 10))
+
+    st.subheader('A Graph!')
+
+if __name__ == '__main__':
+    main()
 
