@@ -1,9 +1,9 @@
 # Generalizable Deep Reinforcement Learning with Observational Dropout
 Dockerized Tensorflow 2.0 implementation of *Observational Dropout* in OpenAI's new procedurally generated [Procgen](https://openai.com/blog/procgen-benchmark/) environment released in December 2019. To learn more about Google Brain's research on Observational Dropout, check out this [direct link to their github page](https://learningtopredict.github.io/ "Observational Dropout"). 
 
-The gif below shows an untrained Reinforcement Learning agent exploring the *Starpilot* environment from OpenAI's new Procgen benchmark suite.
-
 ![untrained RL agent](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/RL1.gif) 
+
+The gif above shows an _untrained_ Reinforcement Learning agent exploring the randomized *Starpilot* environment from OpenAI's new Procgen benchmark suite.
 
 ## Project Motivation
 Deep Reinforcement Learning (RL) is an amazing AI approach that has enabled us to solve some really [interesting](https://openai.com/blog/emergent-tool-use/) and [challenging](https://deepmind.com/research/case-studies/alphago-the-story-so-far) [problems](https://openai.com/blog/openai-five/) by leveraging the ability to probe interactions in real or simulated environments. As Reinforcement Learning approaches further develop, RL has the potential to revolutionize and disrupt billion dollar industries in robotics and autonomous systems, learning recommender systems, adaptive optimizers, real-time financial tech, and more.
