@@ -53,9 +53,9 @@ class Model(Model):
 
         self.d7 = Dense(16*16*16, activation='relu', kernel_regularizer=regularizers.l2(0.000))
         self.reshape = Reshape((16,16,16)) 
-        self.deconv1 = Conv2DTranspose(16, 3, padding='same', activation='relu')
-        self.deconv2 = Conv2DTranspose(16, 3, padding='same', activation='relu')
-        self.deconv3 = Conv2DTranspose(3, 3, padding='same')
+        self.deconv1 = Conv2DTranspose(32, 3, padding='same', activation='relu', kernel_regularizer=regularizers.l2(0e-3))
+        self.deconv2 = Conv2DTranspose(32, 3, padding='same', activation='relu', kernel_regularizer=regularizers.l2(0e-3))
+        self.deconv3 = Conv2DTranspose(3, 3, padding='same', kernel_regularizer=regularizers.l2(0e-3))
         self.upsample1 = UpSampling2D(2)
         self.upsample2 = UpSampling2D(2)
         self.relu = ReLU()
@@ -84,6 +84,7 @@ class Model(Model):
         #y = self.d4(flattened)
 
         # observation deconvolution
+        #z = self.d7(tf.concat([flattened,self.logits(flattened)],axis=-1))
         z = self.d7(flattened)
         z = self.reshape(z) 
         z = self.deconv1(z)

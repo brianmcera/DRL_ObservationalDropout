@@ -83,7 +83,7 @@ class Agent(Agent_Wrapper):
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
-                    rewards[step] -= 1
+                    #rewards[step] -= 1
                     _, next_value = self.model.action_value(
                             combined_obs[None,:])
                     if(not random_action):
@@ -185,6 +185,9 @@ class Agent(Agent_Wrapper):
 
             total_reward += reward
             if done:
+                next_obs = env.reset().astype(np.float64)
+                next_obs = (next_obs)/256.0  
+                prev_obs = next_obs.copy()
                 break
         return total_reward
 
@@ -194,7 +197,7 @@ def main():
     parser.add_argument('-v', '--visual', default=False, action='store_true')
     parser.add_argument('-bs', '--batch_size', type=int, default=5000)
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
-    parser.add_argument('-l', '--local', default=False, action='store_true')
+    parser.add_argument('-l', '--load_model_path', default=None)
     parser.add_argument('-ts', '--total_steps', type=int, default=int(5e6))
     args = parser.parse_args()
     np.set_printoptions(precision=3)
@@ -205,16 +208,10 @@ def main():
     # enable dynamic GPU memory allocation
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     assert len(physical_devices) > 0
-    if args.local:
-        print('Training on local GPU, limit memory allocation')
-        tf.config.experimental.set_memory_growth(physical_devices[0], True)
-        tf.config.experimental.set_virtual_device_configuration(
-                physical_devices[0],
-                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4000)])
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-starpilot-v0", num_levels=0, start_level=0, distribution_mode="easy") 
+    env = gym.make("procgen:procgen-chaser-v0", num_levels=0, start_level=0, distribution_mode="easy") 
     with tf.Graph().as_default():
         #tf.compat.v1.disable_eager_execution()
         # set up tensorboard logging
@@ -237,9 +234,10 @@ def main():
         rewards_min = np.array([np.amin(rewards_history[:-1])])
         rewards_max = np.amax([np.amax(rewards_history[:-1])])
         graph = tf.compat.v1.get_default_graph()
-        if True:
+        if args.load_model_path:
             print('Loading pre-trained weights~~~')
-            agent.model.load_weights('../pretrained_examples/' + '20200227-starpilot_randomstage_lineardecayCR_30k_A2C_SharedCNN_4800000')
+            print('Loading Model from File: {}'.format(args.load_model_path))
+            agent.model.load_weights(args.load_model_path)
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         with open('../logs/' + start_time + '_' + model.model_name + '.csv', mode='w') as csv_file:

@@ -18,7 +18,7 @@ import A2C_OD_SharedCNN as Model
 
 
 class Agent(Agent_Wrapper):
-    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=0.5, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=2048):
+    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, reconstruction_c=1, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=1024):
         self.model = model
         self.value_c = value_c
         self.entropy_c = entropy_c
@@ -43,7 +43,7 @@ class Agent(Agent_Wrapper):
                 loss=[
                     self._logits_loss_PPO, # actor loss
                     self._value_loss,   # critic loss
-                    self._reconstruction_loss
+                    self._reconstruction_loss_2
                     ])
 
     def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False, tb_callback=None):
@@ -53,6 +53,7 @@ class Agent(Agent_Wrapper):
         neglogprobs_prev = np.empty((batch_sz,))
         rewards, dones, values = np.empty((3, batch_sz))
         observations = np.empty((batch_sz,) + env.observation_space.shape)
+        true_observations_p1 = np.empty((batch_sz,) + env.observation_space.shape)
         reconstructions = np.zeros_like(observations)
         reconstr_mask = np.zeros((batch_sz,))
         observations = np.concatenate((observations,observations), axis=-1)
@@ -82,10 +83,12 @@ class Agent(Agent_Wrapper):
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
                 next_obs = (next_obs)/256.0
+                true_observations_p1[step] = next_obs.copy()
 
                 # Observational Dropout
                 if (np.random.uniform() > self.peek_prob):
                     next_obs = reconstructions[step]
+                    #next_obs = next_obs + 1e-2*np.random.randn(*next_obs.shape)
                     next_obs = np.maximum(next_obs, -1)
                     next_obs = np.minimum(next_obs, 1)
                     reconstr_mask[step] = 1
@@ -148,7 +151,8 @@ class Agent(Agent_Wrapper):
             advs_broadcast = reconstructions*0 + advs_reshaped
             mask_reshaped = reconstr_mask.reshape((-1,) + (1,)*(reconstructions.ndim-1))
             mask_broadcast = reconstructions*0 + mask_reshaped
-            reconstr_advs_and_mask = np.concatenate([reconstructions[..., None], advs_broadcast[..., None], mask_broadcast[..., None]], axis=-1)
+            #reconstr_advs_and_mask = np.concatenate([reconstructions[..., None], advs_broadcast[..., None], mask_broadcast[..., None]], axis=-1)
+            obs_reconstr_advs_and_mask = np.concatenate([observations[..., :3, None], reconstructions[..., None], advs_broadcast[..., None], mask_broadcast[..., None]], axis=-1)
 
             # Disregard incomplete runs at head/tail
             idx = np.argwhere(dones==1)
@@ -158,9 +162,12 @@ class Agent(Agent_Wrapper):
             # Trim/Decimate observations (if memory capacity is an issue)
             skip = 1
             observations = observations[first_index+1:last_index+1:skip]
+            true_observations_p1 = true_observations_p1[first_index+1:last_index+1:skip]
+            reconstructions = reconstructions[first_index+1:last_index+1:skip]
             returns_and_prev_values = returns_and_prev_values[first_index+1:last_index+1:skip]
             acts_advs_and_neglogprobs = acts_advs_and_neglogprobs[first_index+1:last_index+1:skip]
-            reconstr_advs_and_mask = reconstr_advs_and_mask[first_index+1:last_index+1:skip]
+            #reconstr_advs_and_mask = reconstr_advs_and_mask[first_index+1:last_index+1:skip]
+            obs_reconstr_advs_and_mask = obs_reconstr_advs_and_mask[first_index+1:last_index+1:skip]
 
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
@@ -168,14 +175,14 @@ class Agent(Agent_Wrapper):
             #print('Current optimizer learning rate: ', str(self.optimizer.learning_rate))
             if(tb_callback):
                 self.model.fit(observations,
-                        [acts_advs_and_neglogprobs, returns_and_prev_values, reconstr_advs_and_mask],
+                        [acts_advs_and_neglogprobs, returns_and_prev_values, obs_reconstr_advs_and_mask],
                         shuffle=True,
                         batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs,
                         callbacks=[tb_callback])
             else:
                 self.model.fit(observations,
-                        [acts_advs_and_neglogprobs, returns_and_prev_values, reconstr_advs_and_mask],
+                        [acts_advs_and_neglogprobs, returns_and_prev_values, obs_reconstr_advs_and_mask],
                         shuffle=True,
                         batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs)
@@ -192,10 +199,6 @@ class Agent(Agent_Wrapper):
             print('Mean probabilities of actions:' + str(np.mean(np.exp(-neglogprobs_prev))) +
                 ', STD probabilities: ' + str(np.std(np.exp(-neglogprobs_prev))))
 
-            plt.imshow((reconstructions[-1]- np.min(reconstructions[-1])) / np.ptp(reconstructions[-1]))
-            plt.show(block=False)
-            plt.draw()
-            time.sleep(0.5)
         return ep_rewards, policy_entropy
 
     def test(self, env, num_steps=5000, render=True):
@@ -218,13 +221,33 @@ class Agent(Agent_Wrapper):
                 break
         return reward
 
+    def play_reconstructions(self, observations, reconstructions):
+        for i in range(len(observations)):
+            plt.subplot(2,3,4)
+            plt.imshow((reconstructions[i,...,0]- np.min(reconstructions[i,...,0])) / np.ptp(reconstructions[i,...,0]))
+            plt.subplot(2,3,5)
+            plt.imshow((reconstructions[i,...,1]- np.min(reconstructions[i,...,1])) / np.ptp(reconstructions[i,...,1]))
+            plt.subplot(2,3,6)
+            plt.imshow((reconstructions[i,...,2]- np.min(reconstructions[i,...,2])) / np.ptp(reconstructions[i,...,2]))
+            plt.subplot(2,3,1)
+            plt.imshow((observations[i,...,0]- np.min(observations[i,...,0])) / np.ptp(observations[i,...,0]))
+            plt.subplot(2,3,2)
+            plt.imshow((observations[i,...,1]- np.min(observations[i,...,1])) / np.ptp(observations[i,...,1]))
+            plt.subplot(2,3,3)
+            plt.imshow((observations[i,...,2]- np.min(observations[i,...,2])) / np.ptp(observations[i,...,2]))
+            plt.show(block=False)
+            input('press enter to continue')
+            plt.close()
+        return
+
+
 
 def main():
     parser = argparse.ArgumentParser(description='RL training parameters')
     parser.add_argument('-v', '--visual', default=False, action='store_true')
     parser.add_argument('-bs', '--batch_size', type=int, default=5000)
     parser.add_argument('-sf', '--show_first', default=False, action='store_true')
-    parser.add_argument('-l', '--local', default=False, action='store_true')
+    parser.add_argument('-l', '--load_model_path', default=None)
     parser.add_argument('-ts', '--total_steps', type=int, default=int(5e6))
     args = parser.parse_args()
     np.set_printoptions(precision=3)
@@ -235,12 +258,6 @@ def main():
     # enable dynamic GPU memory allocation
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     assert len(physical_devices) > 0
-    if args.local:
-        print('Training on local GPU, limit memory allocation')
-        tf.config.experimental.set_memory_growth(physical_devices[0], True)
-        tf.config.experimental.set_virtual_device_configuration(
-                physical_devices[0],
-                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=4000)])
     sim_steps = 0
     batch_sz = args.batch_size
     # Initialize OpenAI Procgen environment 
@@ -254,22 +271,23 @@ def main():
         model = Model.Model(env.action_space.n)
         obs = env.reset()
         agent = Agent(model, args.total_steps)
-        print('\nRandom Trajectories Cold Start...')
-        rewards_history, _ = agent.train(
-                env, updates=1, 
-                batch_sz=batch_sz, 
-                random_action=True, 
-                show_visual=args.visual, 
-                show_first=args.show_first,
-                tb_callback=None)
-        rewards_means = np.array([np.mean(rewards_history[:-1])])
-        rewards_stds = np.array([np.std(rewards_history[:-1])])
-        rewards_min = np.array([np.amin(rewards_history[:-1])])
-        rewards_max = np.amax([np.amax(rewards_history[:-1])])
-        graph = tf.compat.v1.get_default_graph()
-        if False:
+        if args.load_model_path:
             print('Loading pre-trained weights~~~')
-            agent.model.load_weights('../pretrained_examples/' + 'starpilot_stage0_A2C_SharedCNN_OD_200000')
+            print('Loading Model from File: {}'.format(args.load_model_path))
+            agent.model.load_weights(args.load_model_path)
+        else:
+            print('\nRandom Trajectories Cold Start...')
+            rewards_history, _ = agent.train(
+                    env, updates=1, 
+                    batch_sz=batch_sz, 
+                    random_action=True, 
+                    show_visual=args.visual, 
+                    show_first=args.show_first,
+                    tb_callback=None)
+        rewards_means = np.array([])
+        rewards_stds = np.array([])
+        rewards_max = np.array([])
+        graph = tf.compat.v1.get_default_graph()
         iter_count = 0
         start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         clip_rate = 0.2
@@ -290,7 +308,6 @@ def main():
                 sim_steps += batch_sz
                 rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
                 rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-                rewards_min = np.append(rewards_min, np.amin(rewards_history[:-1]))
                 rewards_max = np.append(rewards_max, np.amax(rewards_history[:-1]))
                 print('Total Sim Steps: ' + str(sim_steps))
                 print('Number of levels: ' + str(len(rewards_history)))

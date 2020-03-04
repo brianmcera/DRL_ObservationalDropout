@@ -68,7 +68,15 @@ class Agent_Wrapper(object):
         weighted_MSE = tf.keras.losses.MeanSquaredError()
         reconstruction_loss = weighted_MSE(reconstruction, nn_reconstruction, 
                 sample_weight=advantages*mask)
-        return tf.clip_by_value(self.reconstruction_c*reconstruction_loss, -1e-2, 1e-2)
+        return self.reconstruction_c*reconstruction_loss #tf.clip_by_value(self.reconstruction_c*reconstruction_loss, -1e-1, 1e-1*)
+
+    def _reconstruction_loss_2(self, obs_reconstruction_advantages_mask, nn_reconstruction):
+        observation, reconstruction, advantages, mask = tf.split(obs_reconstruction_advantages_mask, 4, axis=-1)
+        weighted_MSE = tf.keras.losses.MeanSquaredError()
+        reconstruction_loss = weighted_MSE(reconstruction, nn_reconstruction, 
+                sample_weight=advantages*mask)
+        consistency_loss = weighted_MSE(observation, nn_reconstruction, sample_weight=(1-mask))  # reconstruction should look similar to original unperturbed observations
+        return self.reconstruction_c*(reconstruction_loss + consistency_loss) #tf.clip_by_value(self.reconstruction_c*reconstruction_loss, -1e-1, 1e-1*)
 
     def _normalize_advantages(self, advs):
         # Remove outliers with respect to advantage estimates 
