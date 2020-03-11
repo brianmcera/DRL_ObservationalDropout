@@ -84,8 +84,8 @@ class Model(Model):
         #y = self.d4(flattened)
 
         # observation deconvolution
-        #z = self.d7(tf.concat([flattened,self.logits(flattened)],axis=-1))
-        z = self.d7(flattened)
+        z = self.d7(tf.concat([flattened,self.logits(flattened)],axis=-1))
+        #z = self.d7(flattened)
         z = self.reshape(z) 
         z = self.deconv1(z)
         z = self.upsample1(z)
