@@ -18,10 +18,9 @@ In leveraging this new simulation environment, this project investigates an inte
 
 ## Organization for this project repo:
 - **src** : Source code for production within structured directory
-- **tests** : Scripts for testing 
+- **scripts** : Scripts for testing and running examples
 - **configs** : Preset model variables within single directory 
-- **data** : Small amount of data in the Github repository so tests can be run to validate installation
-- **build** : Scripts that automate building of a standalone environment
+- **data** : Folder for training logs, model weight checkpoints, and pretrained models to load
 - **static** : Images or content for the README 
 
 ## Prerequisites
