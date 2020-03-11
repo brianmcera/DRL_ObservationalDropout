@@ -1,8 +1,4 @@
-/logs
-/log_weights
-/model_checkpoints
 *.py~
 *.py.un~
 *.py.swp
 *.un~
-/weights

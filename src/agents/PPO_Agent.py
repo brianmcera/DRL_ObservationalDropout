@@ -1,4 +1,6 @@
 import tensorflow as tf
+import altair as alt
+import pandas as pd
 import numpy as np
 import scipy.stats
 import matplotlib.pyplot as plt
@@ -11,17 +13,17 @@ import argparse
 from tqdm import tqdm
 import csv
 import sys, os 
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-from custom_losses import Agent_Wrapper
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'models'))
-import A2C_Shared_CNN as Model
-
+from src.common.custom_losses import Agent_Wrapper
 
 class Agent(Agent_Wrapper):
-    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=2048):
+    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, 
+            entropy_c=1e-2, entropy_decayrate=0.99, initial_clip_range=0.2, 
+            lam=0.95, num_PPO_epochs=3, batch_sz=1024, remove_outliers=False):
         self.model = model
+        self.total_steps = total_steps
         self.value_c = value_c
         self.entropy_c = entropy_c
+        self.entropy_decayrate = entropy_decayrate
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
                 initial_learning_rate = lr, 
                 decay_steps = total_steps // batch_sz * num_PPO_epochs,
@@ -30,9 +32,11 @@ class Agent(Agent_Wrapper):
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule, epsilon=1e-5)
         self.gamma = gamma
         self.lam = lam
-        self.clip_range = clip_range
+        self.initial_clip_range = initial_clip_range
+        self.clip_range = initial_clip_range
         self.num_PPO_epochs = num_PPO_epochs
         self.batch_size = batch_sz
+        self.remove_outliers = remove_outliers
         
         #compile model
         self.model = model
@@ -43,14 +47,17 @@ class Agent(Agent_Wrapper):
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False, tb_callback=None, sl_fcn=None, sl_obj=None):
+    def train(self, env, current_sim_steps, sim_batch_sz=5000, updates=1, 
+            show_visual=True, random_action=False, show_first=False, 
+            tb_callback=None, v_recorder=None, streamlit=None):
         # Storage helpers for a single batch of data.
-        actions = np.empty((batch_sz,))
-        logits = np.empty((batch_sz, env.action_space.n))
-        neglogprobs_prev = np.empty((batch_sz,))
-        rewards, dones, values = np.empty((3, batch_sz))
-        observations = np.empty((batch_sz,) + env.observation_space.shape)
+        actions = np.empty((sim_batch_sz,))
+        logits = np.empty((sim_batch_sz, env.action_space.n))
+        neglogprobs_prev = np.empty((sim_batch_sz,))
+        rewards, dones, values = np.empty((3, sim_batch_sz))
+        observations = np.empty((sim_batch_sz,) + env.observation_space.shape)
         observations = np.concatenate((observations,observations), axis=-1)
+
 
         # Training loop: collect samples, send to optimizer, repeat updates times.
         print('\n\nRunning episodes...')
@@ -59,31 +66,41 @@ class Agent(Agent_Wrapper):
         next_obs = (next_obs)/256.0
         prev_obs = next_obs.copy()
         first_run = True
+        if streamlit:
+            streamlit['value'].line_chart([0.0])
         for update in range(updates):
-            for step in tqdm(range(batch_sz)):
+            for step in tqdm(range(sim_batch_sz)):
                 combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
                 prev_obs = next_obs.copy()
                 observations[step] = combined_obs.copy()
+                if streamlit:
+                    streamlit['progress_bar'].progress((step+1)/sim_batch_sz)
+                    st_obj = streamlit['render_obj']
+                    render_fcn = streamlit['render_fcn']
+                    render_fcn(st_obj, env.render(mode='rgb_array'), 0)
+                if(v_recorder):
+                    v_recorder.capture_frame()
                 if(show_visual or (show_first and first_run)):
                     env.render()
-                if sl_fcn:
-                    sl_fcn(sl_obj, env, 0)
                 if(random_action):
-                    _, values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
+                    _, values[step], neglogprobs_prev[step] = self.model.action_value_neglogprobs(
                             combined_obs[None,:])
                     actions[step] = env.action_space.sample()
                 else:
-                    actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprob(
+                    actions[step], values[step], neglogprobs_prev[step] = self.model.action_value_neglogprobs(
                             combined_obs[None,:])
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
                 next_obs = (next_obs)/256.0
 
                 logits[step] = self.model.predict_on_batch(combined_obs[None,:])[0][0]
+                if streamlit and step%2==0:
+                    streamlit['ac_prob_plot'].text(logits[step])
+                    streamlit['value'].add_rows([values[step]])
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
-                    #rewards[step] -= 1
+                    rewards[step] -= 0.1
                     _, next_value = self.model.action_value(
                             combined_obs[None,:])
                     if(not random_action):
@@ -100,12 +117,17 @@ class Agent(Agent_Wrapper):
                 _, next_value = self.model.action_value(combined_obs[None,:])
             else:
                 next_value = np.array([0])
-
             returns, advs = self._returns_GAE_advantages(rewards, dones, values, next_value)
 
-            # advs, actions, neglogprobs_prev, returns, values, observations = \
-            #         self._normalize_advantages(advs, actions, neglogprobs_prev, 
-            #         returns, values, observations)
+            # Remove outliers with respect to advantages
+            if(self.remove_outliers):
+                idx = self._normalize_advantages(advs)
+                advs = advs[idx]
+                actions = actions[idx]
+                neglogprobs_prev = neglogprobs_prev[idx]
+                returns = returns[idx]
+                values = values[idx]
+                observations = observations[idx]
 
             # Print out useful training metrics
             print('Average Advantage: ' + str(np.mean(advs)))
@@ -115,6 +137,30 @@ class Agent(Agent_Wrapper):
             print(np.histogram(advs)[0]) 
             print('Advantage histogram bins:')
             print(np.histogram(advs)[1]) 
+
+            if streamlit:
+                action_data = {'actions':actions}
+                actions_pd = pd.DataFrame(data=action_data)
+                c = alt.Chart(actions_pd, width=600).mark_bar().encode(
+                        alt.X('actions:Q', bin=alt.Bin(extent=[0,env.action_space.n], step=1.0)),
+                        y='count()'
+                        ).configure_mark(color='red')   
+                streamlit['action_dist'].altair_chart(c)
+
+                advantage_data = {'advantage':advs}
+                advantage_pd = pd.DataFrame(data=advantage_data)
+                advantage_chart = alt.Chart(advantage_pd, width=600).mark_bar().encode(
+                        alt.X('advantage:Q', bin=True),
+                        y='count()'
+                        ).configure_mark(color='green')
+                streamlit['advantage_dist'].altair_chart(advantage_chart)
+
+                entropy_pd = pd.DataFrame([np.mean(scipy.stats.entropy(np.exp(logits.T)))], columns=('Entropy',))
+                streamlit['entropy_plot'].add_rows(entropy_pd)
+
+                streamlit['progress_bar'].text('Training TensorFlow model. Please hold...')
+
+
 
             # Normalize advantages for numerical stability
             advs -= np.mean(advs)
@@ -155,18 +201,31 @@ class Agent(Agent_Wrapper):
                         batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs)
 
-            # Print out useful training progress information
-            np.set_printoptions(precision=3)
-            print('Action distribution for batch:')
-            print(np.histogram(actions, bins=list(range(0,env.action_space.n)))[0])
-            print('Policy Entropy:')
-            policy_entropy = np.mean(scipy.stats.entropy(np.exp(logits.T)))
-            print(policy_entropy)
-            print('Policy logits peak to peak:')
-            print(np.ptp(logits, axis=0))
-            print('Mean probabilities of actions:' + str(np.mean(np.exp(-neglogprobs_prev))) +
-                ', STD probabilities: ' + str(np.std(np.exp(-neglogprobs_prev))))
-        return ep_rewards, policy_entropy
+            metrics = self.print_metrics(env.action_space.n, actions, logits, neglogprobs_prev)
+
+
+
+            # Update entropy, clip range, and peek probability
+            self.entropy_c *= self.entropy_decayrate  # reduce entropy over iterations
+            self.clip_range = self.initial_clip_range*(1 - current_sim_steps/self.total_steps)  # reduce clip range over iterations
+
+        return ep_rewards, metrics
+
+    def print_metrics(self, n, actions, logits, neglogprobs_prev):
+        # Print out useful training progress information
+        np.set_printoptions(precision=3)
+        metrics ={}
+        print('Action distribution for batch:')
+        print(np.histogram(actions, bins=list(range(0,n)))[0])
+        metrics['policy_entropy'] = np.mean(scipy.stats.entropy(np.exp(logits.T)))
+        print('Policy Entropy: {}'.format(metrics['policy_entropy']))
+        print('Policy logits peak to peak:')
+        print(np.ptp(logits, axis=0))
+        metrics['mean_ac_prob'] = np.mean(np.exp(-neglogprobs_prev))
+        metrics['std_ac_prob'] = np.std(np.exp(-neglogprobs_prev))
+        print('Mean probabilities of actions: {}, STD probabilities: {}'.format(metrics['mean_ac_prob'], metrics['std_ac_prob']))
+        print('Current Entropy Coeff: {}, Current Clip Range: {}'.format(self.entropy_c, self.clip_range))
+        return metrics
 
     def test(self, env, num_steps=5000, render=True):
         total_reward = 0
@@ -185,99 +244,6 @@ class Agent(Agent_Wrapper):
 
             total_reward += reward
             if done:
-                next_obs = env.reset().astype(np.float64)
-                next_obs = (next_obs)/256.0  
-                prev_obs = next_obs.copy()
                 break
-        return total_reward
-
-
-def main():
-    parser = argparse.ArgumentParser(description='RL training parameters')
-    parser.add_argument('-v', '--visual', default=False, action='store_true')
-    parser.add_argument('-bs', '--batch_size', type=int, default=5000)
-    parser.add_argument('-sf', '--show_first', default=False, action='store_true')
-    parser.add_argument('-l', '--load_model_path', default=None)
-    parser.add_argument('-ts', '--total_steps', type=int, default=int(5e6))
-    args = parser.parse_args()
-    np.set_printoptions(precision=3)
-
-    #random.seed(0)
-    #tf.random.set_seed(0)
-
-    # enable dynamic GPU memory allocation
-    physical_devices = tf.config.experimental.list_physical_devices('GPU')
-    assert len(physical_devices) > 0
-    sim_steps = 0
-    batch_sz = args.batch_size
-    # Initialize OpenAI Procgen environment 
-    env = gym.make("procgen:procgen-chaser-v0", num_levels=0, start_level=0, distribution_mode="easy") 
-    with tf.Graph().as_default():
-        #tf.compat.v1.disable_eager_execution()
-        # set up tensorboard logging
-        current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        log_dir = 'logs/tensorboard/' + current_time
-        tensorboard_callback = None #tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
-        model = Model.Model(env.action_space.n)
-        obs = env.reset()
-        agent = Agent(model, args.total_steps)
-        print('\nRandom Trajectories Cold Start...')
-        rewards_history, _ = agent.train(
-                env, updates=1, 
-                batch_sz=batch_sz, 
-                random_action=True, 
-                show_visual=args.visual, 
-                show_first=args.show_first,
-                tb_callback=None)
-        rewards_means = np.array([np.mean(rewards_history[:-1])])
-        rewards_stds = np.array([np.std(rewards_history[:-1])])
-        rewards_min = np.array([np.amin(rewards_history[:-1])])
-        rewards_max = np.amax([np.amax(rewards_history[:-1])])
-        graph = tf.compat.v1.get_default_graph()
-        if args.load_model_path:
-            print('Loading pre-trained weights~~~')
-            print('Loading Model from File: {}'.format(args.load_model_path))
-            agent.model.load_weights(args.load_model_path)
-        iter_count = 0
-        start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-        with open('../logs/' + start_time + '_' + model.model_name + '.csv', mode='w') as csv_file:
-            csv_writer = csv.writer(csv_file, delimiter=',')
-            csv_writer.writerow(['num_steps', 'num_episodes', 'rew_mean', 'rew_std', 'entropy'])
-            clip_rate = 0.2
-            for _ in range(args.total_steps // args.batch_size + 1):
-                iter_count += 1
-                rewards_history, policy_entropy = agent.train(env, 
-                        batch_sz=batch_sz, 
-                        show_visual=args.visual, 
-                        show_first=args.show_first,
-                        tb_callback=tensorboard_callback)
-                agent.entropy_c *= 0.99  # reduce entropy over iterations
-                agent.clip_range = clip_rate*(1 - sim_steps/args.total_steps)  # reduce clip range over iterations
-                print('Current Entropy Coeff: {}, Current Clip Range: {}'.format(agent.entropy_c, agent.clip_range))
-                sim_steps += batch_sz
-                rewards_means = np.append(rewards_means, np.mean(rewards_history[:-1]))
-                rewards_stds = np.append(rewards_stds, np.std(rewards_history[:-1]))
-                rewards_min = np.append(rewards_min, np.amin(rewards_history[:-1]))
-                rewards_max = np.append(rewards_max, np.amax(rewards_history[:-1]))
-                print('Total Sim Steps: ' + str(sim_steps))
-                print('Number of levels: ' + str(len(rewards_history)))
-                print('Epoch mean reward: ')
-                print(rewards_means[-10:])
-                print('Epoch std reward: ')
-                print(rewards_stds[-10:])
-                print('Epoch max reward: ')
-                print(rewards_max[-10:])
-                current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-                csv_writer.writerow([str(sim_steps), str(len(rewards_history)), str(rewards_means[-1]), 
-                    str(rewards_stds[-1]), str(policy_entropy)])
-                if(iter_count%10 == 0):
-                    model.save_weights('../log_weights/' + current_time + '_' + model.model_name + '_' + str(sim_steps), 
-                            save_format='tf')
-        print('Finished Training, testing now...')
-        return
-
-
-if __name__ == "__main__":
-    main()
-
+        return reward
 

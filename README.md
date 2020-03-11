@@ -1,9 +1,9 @@
 # Generalizable Deep Reinforcement Learning with Observational Dropout
 Dockerized Tensorflow 2.0 implementation of *Observational Dropout* in OpenAI's new procedurally generated [Procgen](https://openai.com/blog/procgen-benchmark/) environment released in December 2019. To learn more about Google Brain's research on Observational Dropout, check out this [direct link to their github page](https://learningtopredict.github.io/ "Observational Dropout"). 
 
-The gif below shows an untrained Reinforcement Learning agent exploring the *Starpilot* environment from OpenAI's new Procgen benchmark suite.
-
 ![untrained RL agent](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/RL1.gif) 
+
+The gif above shows an _untrained_ Reinforcement Learning agent exploring the randomized *Starpilot* environment from OpenAI's new Procgen benchmark suite.
 
 ## Project Motivation
 Deep Reinforcement Learning (RL) is an amazing AI approach that has enabled us to solve some really [interesting](https://openai.com/blog/emergent-tool-use/) and [challenging](https://deepmind.com/research/case-studies/alphago-the-story-so-far) [problems](https://openai.com/blog/openai-five/) by leveraging the ability to probe interactions in real or simulated environments. As Reinforcement Learning approaches further develop, RL has the potential to revolutionize and disrupt billion dollar industries in robotics and autonomous systems, learning recommender systems, adaptive optimizers, real-time financial tech, and more.
@@ -14,12 +14,13 @@ Despite this, Reinforcement Learning has struggled to become as widely adopted i
 
 In leveraging this new simulation environment, this project investigates an interesting approach called *Observational Dropout* to see if forcing RL agents to use 'imagined' future states can lead to more generalizable behavior even with limited sampled data. This more challenging operating condition can be representative of situations where observational sensor data might be difficult or expensive to acquire and can highlight some of the challenges regarding sample efficiency and domain transfer with Reinforcement Learning.
 
+![Observational Dropout Flow](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/OD_model.png) 
+
 ## Organization for this project repo:
 - **src** : Source code for production within structured directory
-- **tests** : Scripts for testing 
+- **scripts** : Scripts for testing and running examples
 - **configs** : Preset model variables within single directory 
-- **data** : Small amount of data in the Github repository so tests can be run to validate installation
-- **build** : Scripts that automate building of a standalone environment
+- **data** : Folder for training logs, model weight checkpoints, and pretrained models to load
 - **static** : Images or content for the README 
 
 ## Prerequisites
@@ -54,11 +55,12 @@ In leveraging this new simulation environment, this project investigates an inte
 ## Train your own RL Agent!
 - To run a training session with a Reinforcement Learning agent using the Proximal Policy Optimization algorithm, run the following commands from the ROOT of this repo (the -v flag toggles visualization of the runs ON):
     ```bash
-    >> python src/agents/PPO_Agent.py -v
+    >> cd scripts
+    >> python example_starpilot.py -v
     ```
 - To compare with this agent, run a Reinforcement Learning agent using added Observational Dropout:
     ```bash
-    >> python src/agents/OD_PPO_Agent.py -v
+    >> python example_starpilot_withOD.py -v
     ```
 - If you'd like to compare how you'd perform on these very same tasks, you can interactively play with these games using the following command:
     ```bash
@@ -68,6 +70,19 @@ The keys are: left/right/up/down + q, w, e, a, s, d for the different (environme
 Possible environments that you can try are:
    *bigfish, bossfight, caveflyer, chaser, climber, coinrun, dodgeball, fruitbot, heist, jumper, leaper, maze, miner, ninja, plunder,* and *starpilot.* Please see the [official Procgen Github](https://github.com/openai/procgen) for the specific details of each environment.
    
+## Loading a pretrained model and Streamlit
+- If you'd like to see how a trained RL agent performs, you can add the optional -l flag to load a pretrained model from the pretrained_models folder:
+    ```bash
+    >> python example_starpilot.py -v -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
+    ```
+- To run a streamlit app and view important visuals/training metrics in real time, run the following command:
+    ```bash
+    >> streamlit run streamlit_starpilot.py
+    ```
+- To pass command line arguments, you'll need to enter a double-dash after the original streamlit command:
+    ```bash
+    >> streamlit run streamlit_starpilot.py -- -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
+    ```
 ## Results, Analysis, and Discussion
 Check back here for interesting results/analysis to come!
 
