@@ -68,15 +68,13 @@ class Agent(Agent_Wrapper):
         next_obs = (next_obs)/256.0
         prev_obs = next_obs.copy()
         first_run = True
+        if streamlit:
+            streamlit['value'].line_chart([0.0])
         for update in range(updates):
             for step in tqdm(range(sim_batch_sz)):
                 combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
                 prev_obs = next_obs.copy()
                 observations[step] = combined_obs.copy()
-                if streamlit:
-                    st_obj = streamlit[0]
-                    render_fcn = streamlit[1]
-                    render_fcn(st_obj, env, 0)
                 if(v_recorder):
                     v_recorder.capture_frame()
                 if(show_visual or (show_first and first_run)):
@@ -88,6 +86,13 @@ class Agent(Agent_Wrapper):
                 else:
                     actions[step], values[step], neglogprobs_prev[step], reconstructions[step] = self.model.action_value_neglogprobs_obs(
                             combined_obs[None,:])
+                if streamlit:
+                    streamlit['progress_bar'].progress((step+1)/sim_batch_sz)
+                    st_obj = streamlit['render_obj']
+                    render_fcn = streamlit['render_fcn']
+                    normalized_reconstr = (reconstructions[step]-np.min(reconstructions[step]))/np.ptp(reconstructions[step])
+                    render_fcn(st_obj, [env.render(mode='rgb_array'), 
+                        normalized_reconstr], 0)
                 next_obs, rewards[step], dones[step], _ = env.step(actions[step])
                 next_obs = next_obs.astype(np.float64)
                 next_obs = (next_obs)/256.0
@@ -101,6 +106,9 @@ class Agent(Agent_Wrapper):
                     reconstr_mask[step] = 1
 
                 logits[step] = self.model.predict_on_batch(combined_obs[None,:])[0][0]
+                if streamlit and step%2==0:
+                    streamlit['ac_prob_plot'].text(logits[step])
+                    streamlit['value'].add_rows([values[step]])
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
@@ -144,6 +152,26 @@ class Agent(Agent_Wrapper):
             print('Advantage histogram bins:')
             print(np.histogram(advs)[1]) 
 
+            if streamlit:
+                action_data = {'actions':actions}
+                actions_pd = pd.DataFrame(data=action_data)
+                c = alt.Chart(actions_pd, width=600).mark_bar().encode(
+                        alt.X('actions:Q', bin=alt.Bin(extent=[0,env.action_space.n], step=1.0)),
+                        y='count()'
+                        ).configure_mark(color='red')   
+                streamlit['action_dist'].altair_chart(c)
+
+                advantage_data = {'advantage':advs}
+                advantage_pd = pd.DataFrame(data=advantage_data)
+                advantage_chart = alt.Chart(advantage_pd, width=600).mark_bar().encode(
+                        alt.X('advantage:Q', bin=True),
+                        y='count()'
+                        ).configure_mark(color='green')
+                streamlit['advantage_dist'].altair_chart(advantage_chart)
+
+                entropy_pd = pd.DataFrame([np.mean(scipy.stats.entropy(np.exp(logits.T)))], columns=('Entropy',))
+                streamlit['entropy_plot'].add_rows(entropy_pd)
+
             # Normalize advantages for numerical stability
             advs -= np.mean(advs)
             advs /= np.std(advs) + 1e-6
@@ -181,17 +209,6 @@ class Agent(Agent_Wrapper):
             # Performs a full training step on the collected batch.
             # Note: no need to mess around with gradients, Keras API handles it.
             print('training on batch')
-            #print('Current optimizer learning rate: ', str(self.optimizer.learning_rate))
-            #inputs_dataset = tf.data.Dataset.from_tensor_slices(observations)
-            #outputs_dataset = tf.data.Dataset.from_tensor_slices([acts_advs_and_neglogprobs, returns_and_prev_values, obs_reconstr_advs_and_mask])
-            #dataset = tf.data.Dataset.zip((inputs_dataset, outputs_dataset))
-
-            #def generator():
-            #    for ob, out1, out2, out3 in zip(observations,acts_advs_and_neglogprobs,returns_and_prev_values,obs_reconstr_advs_and_mask):
-            #        yield ob, (out1, out2, out3)
-            #dataset = tf.data.Dataset.from_generator(generator, output_types=tf.float64, output_shapes=((15),(1),(64,64,3))).batch(self.batch_size)
-            #dataset = tf.data.Dataset.from_tensor_slices((observations,
-            #    (acts_advs_and_neglogprobs, returns_and_prev_values, obs_reconstr_advs_and_mask))).shuffle(1024).batch(self.batch_size)
             if(tb_callback):
                 self.model.fit(observations,
                         [acts_advs_and_neglogprobs, returns_and_prev_values, obs_reconstr_advs_and_mask],
@@ -205,8 +222,6 @@ class Agent(Agent_Wrapper):
                         shuffle=True,
                         batch_size=self.batch_size,
                         epochs=self.num_PPO_epochs)
-                #self.model.fit(dataset,
-                #        epochs=self.num_PPO_epochs)
 
             metrics = self.print_metrics(env.action_space.n, actions, logits, neglogprobs_prev)
 

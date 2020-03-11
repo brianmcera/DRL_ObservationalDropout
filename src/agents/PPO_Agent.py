@@ -16,7 +16,9 @@ import sys, os
 from src.common.custom_losses import Agent_Wrapper
 
 class Agent(Agent_Wrapper):
-    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, entropy_c=1e-2, entropy_decayrate=0.99, initial_clip_range=0.2, lam=0.95, num_PPO_epochs=3, batch_sz=1024, remove_outliers=False):
+    def __init__(self, model, total_steps, lr=1e-3, gamma=0.999, value_c=0.5, 
+            entropy_c=1e-2, entropy_decayrate=0.99, initial_clip_range=0.2, 
+            lam=0.95, num_PPO_epochs=3, batch_sz=1024, remove_outliers=False):
         self.model = model
         self.total_steps = total_steps
         self.value_c = value_c
@@ -45,7 +47,9 @@ class Agent(Agent_Wrapper):
                     self._value_loss   # critic loss
                     ])
 
-    def train(self, env, current_sim_steps, sim_batch_sz=5000, updates=1, show_visual=True, random_action=False, show_first=False, tb_callback=None, v_recorder=None, streamlit=None):
+    def train(self, env, current_sim_steps, sim_batch_sz=5000, updates=1, 
+            show_visual=True, random_action=False, show_first=False, 
+            tb_callback=None, v_recorder=None, streamlit=None):
         # Storage helpers for a single batch of data.
         actions = np.empty((sim_batch_sz,))
         logits = np.empty((sim_batch_sz, env.action_space.n))
@@ -62,7 +66,8 @@ class Agent(Agent_Wrapper):
         next_obs = (next_obs)/256.0
         prev_obs = next_obs.copy()
         first_run = True
-        streamlit['value'].line_chart([0.0])
+        if streamlit:
+            streamlit['value'].line_chart([0.0])
         for update in range(updates):
             for step in tqdm(range(sim_batch_sz)):
                 combined_obs = np.concatenate((next_obs,prev_obs), axis=-1)
@@ -72,7 +77,7 @@ class Agent(Agent_Wrapper):
                     streamlit['progress_bar'].progress((step+1)/sim_batch_sz)
                     st_obj = streamlit['render_obj']
                     render_fcn = streamlit['render_fcn']
-                    render_fcn(st_obj, env, 0)
+                    render_fcn(st_obj, env.render(mode='rgb_array'), 0)
                 if(v_recorder):
                     v_recorder.capture_frame()
                 if(show_visual or (show_first and first_run)):
@@ -92,7 +97,6 @@ class Agent(Agent_Wrapper):
                 if streamlit and step%2==0:
                     streamlit['ac_prob_plot'].text(logits[step])
                     streamlit['value'].add_rows([values[step]])
-                    pass
 
                 ep_rewards[-1] += rewards[step]
                 if dones[step]:
@@ -151,9 +155,10 @@ class Agent(Agent_Wrapper):
                         ).configure_mark(color='green')
                 streamlit['advantage_dist'].altair_chart(advantage_chart)
 
-                print([np.mean(scipy.stats.entropy(np.exp(logits.T)))])
                 entropy_pd = pd.DataFrame([np.mean(scipy.stats.entropy(np.exp(logits.T)))], columns=('Entropy',))
                 streamlit['entropy_plot'].add_rows(entropy_pd)
+
+                streamlit['progress_bar'].text('Training TensorFlow model. Please hold...')
 
 
 
