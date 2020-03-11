@@ -56,11 +56,12 @@ In leveraging this new simulation environment, this project investigates an inte
 ## Train your own RL Agent!
 - To run a training session with a Reinforcement Learning agent using the Proximal Policy Optimization algorithm, run the following commands from the ROOT of this repo (the -v flag toggles visualization of the runs ON):
     ```bash
-    >> python src/agents/PPO_Agent.py -v
+    >> cd scripts
+    >> python example_starpilot.py -v
     ```
 - To compare with this agent, run a Reinforcement Learning agent using added Observational Dropout:
     ```bash
-    >> python src/agents/OD_PPO_Agent.py -v
+    >> python example_starpilot_withOD.py -v
     ```
 - If you'd like to compare how you'd perform on these very same tasks, you can interactively play with these games using the following command:
     ```bash
@@ -70,6 +71,19 @@ The keys are: left/right/up/down + q, w, e, a, s, d for the different (environme
 Possible environments that you can try are:
    *bigfish, bossfight, caveflyer, chaser, climber, coinrun, dodgeball, fruitbot, heist, jumper, leaper, maze, miner, ninja, plunder,* and *starpilot.* Please see the [official Procgen Github](https://github.com/openai/procgen) for the specific details of each environment.
    
+## Loading a pretrained model and Streamlit
+- If you'd like to see how a trained RL agent performs, you can add the optional -l flag to load a pretrained model from the pretrained_models folder:
+    ```bash
+    >> python example_starpilot.py -v -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
+    ```
+- To run a streamlit app and view important visuals/training metrics in real time, run the following command:
+    ```bash
+    >> streamlit run streamlit_starpilot.py
+    ```
+- To pass command line arguments, you'll need to enter a double-dash after the original streamlit command:
+    ```bash
+    >> streamlit run streamlit_starpilot.py -- -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
+    ```
 ## Results, Analysis, and Discussion
 Check back here for interesting results/analysis to come!
 
