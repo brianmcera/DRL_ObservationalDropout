@@ -3,7 +3,7 @@ import tensorflow as tf
 import random
 from tensorflow.keras import Model, layers
 from tensorflow.keras import regularizers
-from tensorflow.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPool2D, BatchNormalization, LSTM, TimeDistributed, ConvLSTM2D, Reshape, Conv2DTranspose, UpSampling2D, ReLU
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, MaxPool2D, Reshape, Conv2DTranspose, UpSampling2D, ReLU
 
 class ProbabilityDistribution(Model):
     def call(self, logits, **kwargs):
@@ -77,15 +77,8 @@ class Model(Model):
         flattened = self.relu(flattened)
         flattened = self.d1(flattened)
 
-        # actor dense layers
-        #x = self.d1(flattened)
-
-        # critic dense layers
-        #y = self.d4(flattened)
-
         # observation deconvolution
         z = self.d7(tf.concat([flattened,self.logits(flattened)],axis=-1))
-        #z = self.d7(flattened)
         z = self.reshape(z) 
         z = self.deconv1(z)
         z = self.upsample1(z)
@@ -103,5 +96,4 @@ class Model(Model):
     def action_value_neglogprobs_obs(self, obs):
         logits, value, obs = self.predict_on_batch(obs)
         action, neglogprob = self.dist.predict_on_batch(logits)
-        #action = tf.random.categorical(logits,1)
         return np.squeeze(action, axis=-1), np.squeeze(value, axis=-1), neglogprob, np.squeeze(obs, axis=-1)

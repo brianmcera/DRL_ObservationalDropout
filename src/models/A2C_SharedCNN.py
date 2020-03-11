@@ -3,7 +3,7 @@ import tensorflow as tf
 import random
 from tensorflow.keras import Model, layers
 from tensorflow.keras import regularizers
-from tensorflow.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPool2D, BatchNormalization, LSTM, TimeDistributed, ConvLSTM2D, ReLU
+from tensorflow.keras.layers import Dense, Flatten, Conv2D, Dropout, MaxPool2D, ReLU
 
 class ProbabilityDistribution(Model):
     def call(self, logits, **kwargs):
@@ -69,13 +69,9 @@ class Model(Model):
         flattened = self.d1(flattened)
 
         # actor dense layers
-        #x = self.d1(flattened)
-        #logits = self.logits(x)
         logits = self.logits(flattened)
 
         # critic dense layers
-        #y = self.d4(flattened)
-        #value = self.value(y)
         value = self.value(flattened)
 
         return logits, value  
