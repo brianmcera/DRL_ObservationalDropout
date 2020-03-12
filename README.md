@@ -43,7 +43,7 @@ In leveraging this new simulation environment, this project investigates an inte
     >> git clone https://github.com/brianmcera/DRL_ObservationalDropout.git
     >> cd DRL_ObservationalDropout
     ```
-- Automatically install using Conda and the requirements.txt file: 
+- Automatically set up your virtual environment using Conda and the requirements.txt file: 
     ```bash
     >> conda create --name OD-DRL --file requirements.txt
     ```
@@ -75,7 +75,7 @@ Possible environments that you can try are:
     ```bash
     >> python example_starpilot.py -v -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
     ```
-- To run a streamlit app and view important visuals/training metrics in real time, run the following command:
+- To run a streamlit app and view important visuals/training metrics in real time (see image below), run the following command:
     ```bash
     >> streamlit run streamlit_starpilot.py
     ```
