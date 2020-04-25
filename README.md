@@ -75,11 +75,11 @@ Possible environments that you can try are:
     ```bash
     >> python example_starpilot.py -v -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
     ```
-- To run a streamlit app and view important visuals/training metrics in real time (see image below), run the following command:
+- To run a streamlit app and view important visuals/training metrics in real time (see example image below for a few of the metrics), run the following command:
     ```bash
     >> streamlit run streamlit_starpilot.py
     ```
-![streamlit](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/streamlit_2.png) 
+![streamlit](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/streamlit_3.png) 
 
 - To pass command line arguments, you'll need to enter a double-dash after the original streamlit command:
     ```bash
