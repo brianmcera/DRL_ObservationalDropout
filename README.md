@@ -81,7 +81,7 @@ Possible environments that you can try are:
     ```
 ![streamlit](https://github.com/brianmcera/DRL_ObservationalDropout/blob/master/static/streamlit_3.png) 
 
-- To pass command line arguments, you'll need to enter a double-dash after the original streamlit command:
+- To pass command line arguments with streamlit, you'll need to enter a double-dash after the original streamlit command:
     ```bash
     >> streamlit run streamlit_starpilot.py -- -l ../data/pretrained_models/20200228-starpilot_random_A2C_SharedCNN_4800000
     ```
